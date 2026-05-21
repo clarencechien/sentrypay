@@ -10,7 +10,9 @@ const CONFIG = {
     // 3. 團長預設收款資訊 (抽離至設定檔，不需在 HTML 中硬編碼)
     LEADER_BANK_CODE: "012",             // 台北富邦銀行
     LEADER_ACCOUNT: "0081680005617649",    // 團長預設收款帳號 (14碼)
-    
+    // 3. 辦公室公用預設銀行代碼 (若團長沒填寫時的預設值)
+    DEFAULT_BANK_CODE: "012"
+        
     // 4. 合法管理員/團長的 LINE User ID 
     // 當 LIFF 登入者的 ID 與此相符，才會顯示「團長主控台」頁籤。
     // (您可以先從試算表的 SystemLogs 裡，找到您發送「開團」訊息時的 From: Uxxxxxxxx 亂碼並填入此處)
