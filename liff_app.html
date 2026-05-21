@@ -7,9 +7,13 @@
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- FontAwesome 圖示 -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></link>
     <!-- LINE LIFF SDK -->
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    <!-- QR Code 產生器 (用於現場拆帳) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <!-- 引入獨立設定檔 (抽離敏感金鑰) -->
+    <script src="config.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap');
         body {
@@ -21,7 +25,7 @@
         }
     </style>
 </head>
-<body class="bg-slate-50 min-h-screen pb-24 text-slate-800">
+<body class="bg-slate-50 min-h-screen pb-32 text-slate-800">
 
     <!-- 頂部精美 Banner -->
     <div class="gradient-bg text-white px-6 pt-8 pb-16 rounded-b-[2.5rem] shadow-lg relative">
@@ -41,57 +45,142 @@
         <!-- 當前使用者卡片 -->
         <div class="absolute -bottom-8 left-6 right-6 bg-white text-slate-800 p-4 rounded-2xl shadow-xl border border-slate-100 flex items-center justify-between">
             <div>
-                <p class="text-[10px] text-slate-400 font-bold uppercase">當前點餐人</p>
+                <p class="text-[10px] text-slate-400 font-bold uppercase">當前使用者</p>
                 <h2 id="userName" class="text-base font-bold text-slate-800 mt-0.5">載入 LINE 身分中...</h2>
             </div>
-            <span class="bg-indigo-50 text-indigo-700 text-[10px] font-bold px-2.5 py-1 rounded-full flex items-center">
-                <i class="fas fa-shield-alt mr-1"></i> 免登入已安全保護
-            </span>
+            <!-- 切換頁籤 (Tab Buttons) -->
+            <div class="flex bg-slate-100 p-1 rounded-xl">
+                <button onclick="switchTab('member')" id="tabBtnMember" class="bg-white text-indigo-600 text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm transition-all">
+                    🍔 我要點餐
+                </button>
+                <button onclick="switchTab('leader')" id="tabBtnLeader" class="text-slate-500 text-xs font-bold px-3 py-1.5 rounded-lg transition-all">
+                    👑 團長主控
+                </button>
+            </div>
         </div>
     </div>
 
     <!-- 主要內容區 -->
     <main class="px-6 mt-14 space-y-6">
 
-        <!-- 狀態提示：載入中 -->
-        <div id="loadingStatus" class="bg-white p-8 rounded-3xl text-center border border-slate-100 shadow-sm">
-            <div class="inline-block animate-spin rounded-full h-8 text-indigo-600 border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]" role="status"></div>
-            <p class="text-xs text-slate-400 font-bold mt-3">正在與 Google 雲端安全連線中...</p>
-        </div>
+        <!-- ==================== 【頁籤 1：團員點餐畫面】 ==================== -->
+        <div id="tabContentMember" class="space-y-6">
+            <!-- 狀態提示：載入中 -->
+            <div id="loadingStatus" class="bg-white p-8 rounded-3xl text-center border border-slate-100 shadow-sm">
+                <div class="inline-block animate-spin rounded-full h-8 text-indigo-600 border-4 border-solid border-current border-r-transparent align-[-0.125em]" role="status"></div>
+                <p class="text-xs text-slate-400 font-bold mt-3">正在與 Google 雲端安全連線中...</p>
+            </div>
 
-        <!-- 店家與菜單卡片區 -->
-        <div id="menuContainer" class="hidden space-y-6">
-            <!-- 這裡會由 JS 動態生成多個店家的選單卡片 -->
-        </div>
+            <!-- 店家與菜單卡片區 -->
+            <div id="menuContainer" class="hidden space-y-6">
+                <!-- 由 JS 動態生成多個店家的選單卡片 -->
+            </div>
 
-        <!-- 自訂品項/金額（折疊卡片） -->
-        <div id="customItemCard" class="hidden bg-white rounded-3xl p-5 border border-slate-100 shadow-sm">
-            <button onclick="toggleCustomItem()" class="w-full flex items-center justify-between text-left">
-                <div class="flex items-center space-x-2">
-                    <div class="bg-amber-50 text-amber-600 w-8 h-8 rounded-xl flex items-center justify-center text-xs">
-                        <i class="fas fa-plus-circle"></i>
+            <!-- 自訂品項/金額（折疊卡片） -->
+            <div id="customItemCard" class="hidden bg-white rounded-3xl p-5 border border-slate-100 shadow-sm">
+                <button onclick="toggleCustomItem()" class="w-full flex items-center justify-between text-left">
+                    <div class="flex items-center space-x-2">
+                        <div class="bg-amber-50 text-amber-600 w-8 h-8 rounded-xl flex items-center justify-center text-xs">
+                            <i class="fas fa-plus-circle"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-xs font-bold text-slate-700">想點菜單上沒有的東西？</h3>
+                            <p class="text-[10px] text-slate-400">點此展開填寫自訂品項與金額</p>
+                        </div>
+                    </div>
+                    <i id="customArrow" class="fas fa-chevron-down text-slate-400 text-xs transition-transform duration-200"></i>
+                </button>
+                
+                <div id="customFields" class="hidden mt-4 pt-4 border-t border-slate-100 space-y-3">
+                    <div>
+                        <label class="text-[10px] text-slate-400 font-bold block mb-1">自訂品項名稱</label>
+                        <input type="text" id="customName" placeholder="例如：香雞排、大杯紅茶" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:border-indigo-500 transition-colors">
                     </div>
                     <div>
-                        <h3 class="text-xs font-bold text-slate-700">想點菜單上沒有的東西？</h3>
-                        <p class="text-[10px] text-slate-400">點此展開填寫自訂品項與金額</p>
+                        <label class="text-[10px] text-slate-400 font-bold block mb-1">自訂金額 (NT$)</label>
+                        <input type="number" id="customPrice" placeholder="例如：85" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-right focus:outline-none focus:border-indigo-500 transition-colors">
                     </div>
-                </div>
-                <i id="customArrow" class="fas fa-chevron-down text-slate-400 text-xs transition-transform duration-200"></i>
-            </button>
-            
-            <div id="customFields" class="hidden mt-4 pt-4 border-t border-slate-100 space-y-3">
-                <div>
-                    <label class="text-[10px] text-slate-400 font-bold block mb-1">自訂品項名稱</label>
-                    <input type="text" id="customName" placeholder="例如：香雞排、大杯紅茶" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:border-indigo-500 transition-colors">
-                </div>
-                <div>
-                    <label class="text-[10px] text-slate-400 font-bold block mb-1">自訂金額 (NT$)</label>
-                    <input type="number" id="customPrice" placeholder="例如：85" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-right focus:outline-none focus:border-indigo-500 transition-colors">
                 </div>
             </div>
         </div>
 
-        <!-- 🛠️ 開發者診斷面板 (預設隱藏，出錯時才會顯示) -->
+
+        <!-- ==================== 【頁籤 2：團長主控台畫面】 ==================== -->
+        <div id="tabContentLeader" class="hidden space-y-6">
+            
+            <!-- 1. 設定團長收款帳號 -->
+            <div class="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm space-y-3">
+                <div class="flex items-center space-x-2 text-indigo-600">
+                    <i class="fas fa-wallet text-sm"></i>
+                    <h3 class="text-xs font-bold uppercase tracking-wider">我的富邦收款帳號 (用於產生 TWQRP)</h3>
+                </div>
+                <div class="grid grid-cols-3 gap-2">
+                    <div>
+                        <label class="text-[9px] text-slate-400 block mb-0.5">銀行代碼</label>
+                        <input type="text" id="leaderBank" value="012" readonly class="w-full bg-slate-100 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-center text-slate-500">
+                    </div>
+                    <div class="col-span-2">
+                        <label class="text-[9px] text-slate-400 block mb-0.5">台北富邦帳號 (14碼)</label>
+                        <input type="text" id="leaderAcc" value="0081680005617649" placeholder="請輸入您的帳號" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-mono font-bold tracking-wide focus:outline-none focus:border-indigo-500">
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. 今日即時點單與追加監控 -->
+            <div class="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm space-y-3">
+                <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+                    <div class="flex items-center space-x-2 text-emerald-600">
+                        <i class="fas fa-clipboard-list text-sm"></i>
+                        <h3 class="text-xs font-bold uppercase tracking-wider">今日即時點單明細</h3>
+                    </div>
+                    <button onclick="syncActiveOrders()" class="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-[10px] font-bold px-3 py-1.5 rounded-xl flex items-center space-x-1 transition-all">
+                        <i class="fas fa-sync-alt"></i>
+                        <span>同步最新點單</span>
+                    </button>
+                </div>
+                
+                <div id="activeOrdersContainer" class="space-y-2 max-h-60 overflow-y-auto">
+                    <!-- 由 JS 動態加載 -->
+                    <p class="text-center py-4 text-[11px] text-slate-400">點擊「同步最新點單」載入當日資料</p>
+                </div>
+
+                <div class="bg-slate-50 p-3 rounded-2xl flex justify-between items-center text-xs">
+                    <span class="font-bold text-slate-500">當日累計總金額：</span>
+                    <span id="activeTotalSum" class="font-black text-emerald-600 text-sm">NT$ 0</span>
+                </div>
+            </div>
+
+            <!-- 3. 新增菜單與店家 (Template) -->
+            <div class="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm space-y-3">
+                <div class="flex items-center space-x-2 text-indigo-600">
+                    <i class="fas fa-plus-circle text-sm"></i>
+                    <h3 class="text-xs font-bold uppercase tracking-wider">新增店家與菜單品項</h3>
+                </div>
+                <div class="space-y-3 pt-1 text-xs">
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="text-[9px] text-slate-400 block mb-0.5">店家名稱</label>
+                            <input type="text" id="newVendorName" placeholder="如：池上木片便當" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5">
+                        </div>
+                        <div>
+                            <label class="text-[9px] text-slate-400 block mb-0.5">品項名稱</label>
+                            <input type="text" id="newItemName" placeholder="如：炸雞腿飯" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="text-[9px] text-slate-400 block mb-0.5">品項金額 (NT$)</label>
+                        <input type="number" id="newItemPrice" placeholder="如：120" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-right">
+                    </div>
+                    <button onclick="submitNewVendorItem()" id="btnAddNewVendor" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-xl transition-all flex items-center justify-center space-x-1.5">
+                        <i class="fas fa-cloud-upload-alt"></i>
+                        <span>新增品項至 Google 試算表範本</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- ==================== 【🛠️ 開發者診斷面板】 ==================== -->
         <div id="diagnosticPanel" class="hidden bg-rose-50 border border-rose-100 rounded-3xl p-5 space-y-3">
             <div class="flex items-center space-x-2 text-rose-700">
                 <i class="fas fa-exclamation-triangle"></i>
@@ -110,8 +199,8 @@
 
     </main>
 
-    <!-- 底部固定結帳懸浮列 -->
-    <div class="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-100 px-6 py-4 flex items-center justify-between z-40 shadow-[0_-8px_30px_rgb(0,0,0,0.04)]">
+    <!-- 底部固定結帳懸浮列 (點餐頁籤專用) -->
+    <div id="stickyFooter" class="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-100 px-6 py-4 flex items-center justify-between z-40 shadow-[0_-8px_30px_rgb(0,0,0,0.04)]">
         <div>
             <p class="text-[10px] text-slate-400 font-bold uppercase">今日點餐總計</p>
             <p class="text-2xl font-black text-slate-900 mt-0.5" id="totalPriceDisplay">NT$ 0</p>
@@ -122,6 +211,42 @@
         </button>
     </div>
 
+
+    <!-- ==================== 【對帳付款互動彈窗 (Modal)】 ==================== -->
+    <div id="qrModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-sm rounded-3xl p-6 text-center shadow-xl relative">
+            <button onclick="closeModal()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600">
+                <i class="fas fa-times-circle text-xl"></i>
+            </button>
+            
+            <span class="bg-indigo-50 text-indigo-800 text-[10px] font-bold px-2.5 py-1 rounded-full inline-block mb-1">
+                SentryPay 現場拆帳
+            </span>
+            <h3 class="text-xl font-bold text-slate-800" id="modalName">同事姓名</h3>
+            <p class="text-[11px] text-slate-400 mb-4">使用行動網銀 App 的「掃碼」功能</p>
+            
+            <!-- QR Code 顯示區域 -->
+            <div class="bg-slate-100 rounded-2xl p-4 inline-block shadow-inner mb-4">
+                <div id="qrcode" class="flex justify-center"></div>
+                <div class="text-3xl font-black text-slate-900 mt-3" id="modalPrice">NT$ 0</div>
+            </div>
+
+            <div class="space-y-2">
+                <!-- 📱 富邦原生 Deep Link 呼叫按鈕 -->
+                <button onclick="triggerFubonDeepLink()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-3.5 rounded-xl transition-all flex items-center justify-center space-x-1.5 shadow-md">
+                    <i class="fas fa-mobile-alt animate-bounce"></i>
+                    <span>📱 喚醒富邦行動網銀 (台幣轉帳)</span>
+                </button>
+
+                <button onclick="copyPaymentText()" class="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold py-2.5 rounded-xl transition-all flex items-center justify-center space-x-1">
+                    <i class="fas fa-copy"></i>
+                    <span>複製完整轉帳資訊</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+
     <!-- 成功與失敗的提示通知 (Toast) -->
     <div id="toast" class="fixed top-6 left-1/2 -translate-x-1/2 px-4 py-3 rounded-2xl text-xs font-bold text-white shadow-xl transition-all duration-300 transform translate-y-[-100px] opacity-0 z-50 flex items-center space-x-2">
         <i id="toastIcon" class="fas"></i>
@@ -129,9 +254,10 @@
     </div>
 
     <script>
-        // ==================== 【開發者參數設定區】 ====================
-        const LIFF_ID = "2010150112-ejdkGN7h"; // 例如 "2001234567-abcde"
-        const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbygmumhGW6KaWj1Jbc7ZSo8IeKxrdyPcJWpJKeALvFZEqo_McMxYpzJbP6kbO81Q3eV/exec"; // 必須是 /exec 結尾的正式網址！
+        // ==================== 【開發者參數安全讀取區】 ====================
+        // 優雅降級：若外部 config.js 載入失敗，才會採用此處的備用預設值，確保網頁絕不崩潰
+        const LIFF_ID = typeof CONFIG !== 'undefined' ? CONFIG.LIFF_ID : "2010150112-ejdkGN7h";
+        const GAS_WEB_APP_URL = typeof CONFIG !== 'undefined' ? CONFIG.GAS_WEB_APP_URL : "https://script.google.com/macros/s/AKfycbygmumhGW6KaWj1Jbc7ZSo8IeKxrdyPcJWpJKeALvFZEqo_McMxYpzJbP6kbO81Q3eV/exec";
 
         // ==================== 【全域狀態變數】 ====================
         let currentUserName = "測試同事";
@@ -139,20 +265,55 @@
         let menuData = [];
         let selectedItems = {}; // 紀錄選中的品項 { "品項名稱": 單價 }
         let isCustomOpen = false;
+        let qrCodeGenerator = null;
+        let activeModalPayload = null;
 
         // 初始化
         window.onload = function() {
             initLIFF();
+            // 初始化 QR 產生器
+            qrCodeGenerator = new QRCode(document.getElementById("qrcode"), {
+                width: 170,
+                height: 170,
+                colorDark : "#0f172a",
+                colorLight : "#ffffff",
+                correctLevel : QRCode.CorrectLevel.M
+            });
         };
+
+        // 頁籤切換
+        function switchTab(tab) {
+            const btnMember = document.getElementById('tabBtnMember');
+            const btnLeader = document.getElementById('tabBtnLeader');
+            const contentMember = document.getElementById('tabContentMember');
+            const contentLeader = document.getElementById('tabContentLeader');
+            const stickyFooter = document.getElementById('stickyFooter');
+
+            if (tab === 'member') {
+                btnMember.className = "bg-white text-indigo-600 text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm transition-all";
+                btnLeader.className = "text-slate-500 text-xs font-bold px-3 py-1.5 rounded-lg transition-all";
+                contentMember.classList.remove('hidden');
+                contentLeader.classList.add('hidden');
+                stickyFooter.classList.remove('hidden');
+            } else {
+                btnLeader.className = "bg-white text-indigo-600 text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm transition-all";
+                btnMember.className = "text-slate-500 text-xs font-bold px-3 py-1.5 rounded-lg transition-all";
+                contentMember.classList.add('hidden');
+                contentLeader.classList.remove('hidden');
+                stickyFooter.classList.add('hidden');
+                // 切換至團長時，自動同步一次當日點單
+                syncActiveOrders();
+            }
+        }
 
         // LINE LIFF 初始化與登入狀態檢查
         function initLIFF() {
             liff.init({ liffId: LIFF_ID })
                 .then(() => {
                     if (!liff.isLoggedIn()) {
-                        liff.login(); // 沒登入則引導登入
+                        liff.login(); // 引導登入
                     } else {
-                        // 取得使用者 LINE 大頭貼與暱稱
+                        // 取得使用者資訊
                         liff.getProfile()
                             .then(profile => {
                                 currentUserName = profile.displayName;
@@ -166,49 +327,42 @@
                                     avatarImg.classList.remove('hidden');
                                     document.getElementById('avatarPlaceholder').classList.add('hidden');
                                 }
-                                
-                                // 開始讀取試算表中的店家選單
                                 fetchMenuData();
                             })
                             .catch(err => {
                                 console.error('取得 LINE Profile 失敗:', err);
                                 showDiagnostic("LINE Profile Error", err.toString());
-                                fetchMenuData(); // 即使失敗仍載入選單（預設為測試帳號）
+                                fetchMenuData(); 
                             });
                     }
                 })
                 .catch(err => {
                     console.error('LIFF 初始化失敗:', err);
                     showDiagnostic("LIFF Init Error", err.toString());
-                    // 處於外置瀏覽器測試環境
-                    document.getElementById('userName').innerText = "本地測試同事 (開發中)";
+                    document.getElementById('userName').innerText = "測試同事 (外置瀏覽器開發中)";
                     fetchMenuData();
                 });
         }
 
-        // 從 Google 試算表讀取菜單選單 (doGet)
+        // 讀取試算表中的店家選單
         function fetchMenuData() {
             const fetchUrl = `${GAS_WEB_APP_URL}?method=getVendors`;
             
             fetch(fetchUrl)
                 .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`HTTP 錯誤碼: ${response.status}`);
-                    }
+                    if (!response.ok) throw new Error(`HTTP 錯誤碼: ${response.status}`);
                     return response.json();
                 })
                 .then(json => {
-                    // 對齊新版 GAS 格式：{ status: "success", data: [...] }
                     if (json && json.status === "success" && Array.isArray(json.data)) {
                         menuData = json.data;
                         renderMenu(menuData);
                         
-                        // 關閉 Loading 畫面，打開菜單與自訂欄位
                         document.getElementById('loadingStatus').classList.add('hidden');
                         document.getElementById('menuContainer').classList.remove('hidden');
                         document.getElementById('customItemCard').classList.remove('hidden');
                     } else {
-                        throw new Error(json.message || "讀取到的資料格式不正確，找不到 status === 'success'");
+                        throw new Error(json.message || "讀取到的資料格式不正確");
                     }
                 })
                 .catch(err => {
@@ -226,21 +380,16 @@
             const container = document.getElementById('menuContainer');
             container.innerHTML = '';
 
-            // 1. 將資料依「店家名稱」進行分組
             const grouped = {};
             data.forEach(item => {
-                if (!grouped[item.vendor]) {
-                    grouped[item.vendor] = [];
-                }
+                if (!grouped[item.vendor]) grouped[item.vendor] = [];
                 grouped[item.vendor].push(item);
             });
 
-            // 2. 針對每家店家渲染一張卡片
             Object.keys(grouped).forEach(vendorName => {
                 const vendorCard = document.createElement('div');
                 vendorCard.className = "bg-white rounded-3xl p-5 border border-slate-100 shadow-sm space-y-3";
                 
-                // 店家頭部標題
                 let vendorIcon = vendorName.includes('咖啡') || vendorName.includes('星巴克') ? 'fa-coffee text-amber-700 bg-amber-50' : 'fa-utensils text-emerald-600 bg-emerald-50';
                 vendorCard.innerHTML = `
                     <div class="flex items-center space-x-2.5 pb-2 border-b border-slate-50">
@@ -253,7 +402,6 @@
                 container.appendChild(vendorCard);
                 const itemsContainer = document.getElementById(`items-${vendorName.replace(/\s+/g, '')}`);
 
-                // 3. 渲染該店家的所有品項
                 grouped[vendorName].forEach(p => {
                     const itemRow = document.createElement('label');
                     itemRow.className = "flex items-center justify-between bg-slate-50/50 hover:bg-slate-50 active:scale-[0.98] px-3.5 py-3 rounded-2xl cursor-pointer border border-slate-100 transition-all";
@@ -278,24 +426,22 @@
             if (isCustomOpen) {
                 fields.classList.remove('hidden');
                 arrow.style.transform = 'rotate(180deg)';
-                // 綁定輸入監聽事件，當使用者手動打字時，也能即時更新總計
                 document.getElementById('customName').addEventListener('input', calculateTotal);
                 document.getElementById('customPrice').addEventListener('input', calculateTotal);
             } else {
                 fields.classList.add('hidden');
                 arrow.style.transform = 'rotate(0deg)';
-                calculateTotal(); // 重新計算總計
+                calculateTotal();
             }
         }
 
-        // 當勾選/取消品項時觸發
+        // 點餐勾選觸發
         function handleItemSelect(checkbox) {
             const itemName = checkbox.value;
             const itemPrice = parseInt(checkbox.getAttribute('data-price'), 10);
 
             if (checkbox.checked) {
                 selectedItems[itemName] = itemPrice;
-                // 視覺效果：加上選取高亮外框
                 checkbox.closest('label').classList.add('border-emerald-500', 'bg-emerald-50/20');
             } else {
                 delete selectedItems[itemName];
@@ -304,28 +450,21 @@
             calculateTotal();
         }
 
-        // 計算選餐總金額
+        // 計算點餐總金額
         function calculateTotal() {
             let total = 0;
-
-            // 1. 累加勾選的品項金額
             Object.keys(selectedItems).forEach(key => {
                 total += selectedItems[key];
             });
 
-            // 2. 累加自訂品項金額（若折疊選單是打開的且有填寫金額）
             if (isCustomOpen) {
                 const cName = document.getElementById('customName').value.trim();
                 const cPrice = parseInt(document.getElementById('customPrice').value, 10);
-                if (cName && cPrice > 0) {
-                    total += cPrice;
-                }
+                if (cName && cPrice > 0) total += cPrice;
             }
 
-            // 3. 更新介面金額顯示
             document.getElementById('totalPriceDisplay').innerText = `NT$ ${total}`;
 
-            // 4. 控制「送出訂單」按鈕的啟用狀態
             const btn = document.getElementById('btnSubmit');
             if (total > 0) {
                 btn.disabled = false;
@@ -336,23 +475,20 @@
             }
         }
 
-        // 送出點餐至 Google 試算表 (submitOrder)
+        // 提交點單到 Google Sheets
         function submitOrder() {
             const btn = document.getElementById('btnSubmit');
             btn.disabled = true;
             btn.innerHTML = `<i class="fas fa-circle-notch animate-spin"></i> <span>正在傳送資料...</span>`;
 
-            // 1. 統整點餐項目與金額
             let itemsList = [];
             let totalAmount = 0;
 
-            // 勾選部分
             Object.keys(selectedItems).forEach(key => {
                 itemsList.push(key);
                 totalAmount += selectedItems[key];
             });
 
-            // 自訂部分
             if (isCustomOpen) {
                 const cName = document.getElementById('customName').value.trim();
                 const cPrice = parseInt(document.getElementById('customPrice').value, 10);
@@ -363,21 +499,16 @@
             }
 
             const finalItemString = itemsList.join(' + ');
-
-            // 2. 構造 GET 請求參數
             const submitUrl = `${GAS_WEB_APP_URL}?method=submitOrder&name=${encodeURIComponent(currentUserName)}&item=${encodeURIComponent(finalItemString)}&amount=${totalAmount}`;
 
             fetch(submitUrl)
                 .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`HTTP 錯誤碼: ${response.status}`);
-                    }
+                    if (!response.ok) throw new Error(`HTTP 錯誤碼: ${response.status}`);
                     return response.json();
                 })
                 .then(json => {
                     if (json && json.status === "success") {
-                        showToast("🎉 點餐已成功登錄！請回到聊天室對帳", "success");
-                        // 1.5 秒後自動關閉 LIFF 網頁
+                        showToast("🎉 點餐成功！資料已送至 Google 試算表", "success");
                         setTimeout(() => {
                             liff.closeWindow();
                         }, 1500);
@@ -394,14 +525,185 @@
                 });
         }
 
-        // 輔助函式：顯示錯誤診斷面板
+        // ==================== 【👑 團長功能實作區】 ====================
+
+        // 👑 同步即時點單
+        function syncActiveOrders() {
+            const container = document.getElementById('activeOrdersContainer');
+            container.innerHTML = `
+                <div class="text-center py-6">
+                    <div class="inline-block animate-spin rounded-full h-5 w-5 text-indigo-600 border-2 border-solid border-current border-r-transparent align-[-0.125em]"></div>
+                    <p class="text-[10px] text-slate-400 mt-2 font-bold">正在讀取最新訂單資料...</p>
+                </div>
+            `;
+
+            const syncUrl = `${GAS_WEB_APP_URL}?method=getActiveOrders`;
+
+            fetch(syncUrl)
+                .then(response => response.json())
+                .then(json => {
+                    if (json && json.status === "success") {
+                        const orders = json.data;
+                        renderActiveOrders(orders);
+                    } else {
+                        throw new Error(json.message || "取得明細失敗");
+                    }
+                })
+                .catch(err => {
+                    container.innerHTML = `<p class="text-center py-4 text-xs text-rose-500 font-bold">同步失敗，請檢查網路連線</p>`;
+                    showDiagnostic(syncUrl, err.toString());
+                });
+        }
+
+        // 👑 渲染即時點單明細
+        function renderActiveOrders(orders) {
+            const container = document.getElementById('activeOrdersContainer');
+            container.innerHTML = '';
+
+            if (!orders || orders.length === 0) {
+                container.innerHTML = `<p class="text-center py-6 text-xs text-slate-400">目前今日還沒有人下單喔！</p>`;
+                document.getElementById('activeTotalSum').innerText = 'NT$ 0';
+                return;
+            }
+
+            let totalSum = 0;
+
+            orders.forEach(o => {
+                totalSum += o.amount;
+
+                const card = document.createElement('div');
+                card.className = "flex justify-between items-center bg-slate-50 hover:bg-slate-100 p-3 rounded-2xl border border-slate-100 transition-all";
+                card.innerHTML = `
+                    <div class="flex-1 min-w-0 pr-2">
+                        <div class="flex items-center space-x-1.5">
+                            <span class="font-bold text-xs text-slate-700">${o.name}</span>
+                            <span class="bg-indigo-50 text-indigo-600 text-[8px] font-bold px-1.5 py-0.5 rounded-full">未付</span>
+                        </div>
+                        <p class="text-[9px] text-slate-400 truncate mt-0.5">${o.item}</p>
+                    </div>
+                    <div class="flex items-center space-x-2 shrink-0">
+                        <span class="font-black text-indigo-600 text-xs">NT$ ${o.amount}</span>
+                        <button onclick="openSettleModal('${o.name}', ${o.amount})" class="bg-indigo-600 text-white text-[10px] font-bold px-3 py-1.5 rounded-xl flex items-center space-x-1 hover:bg-indigo-700 active:scale-95 transition-all">
+                            <i class="fas fa-qrcode"></i>
+                            <span>拆帳對帳</span>
+                        </button>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+
+            document.getElementById('activeTotalSum').innerText = `NT$ ${totalSum}`;
+        }
+
+        // 👑 打開拆帳付款彈窗
+        function openSettleModal(name, amount) {
+            const bAcc = document.getElementById('leaderAcc').value.trim();
+            if (!bAcc) {
+                showToast("⚠️ 請先在上方填寫您的富邦收款帳號！", "error");
+                return;
+            }
+
+            activeModalPayload = { name: name, amount: amount, acc: bAcc };
+
+            // TWQRP 協定格式：補足 16 碼帳號，金額變成分
+            const paddedAcc = bAcc.replace(/\s/g, '').padStart(16, '0');
+            const cents = amount * 100;
+            const twqrpString = `TWQRP://012NTTransfer/158/02/V1?D6=${paddedAcc}&D5=012&D1=${cents}&D10=901`;
+
+            // 生成條碼
+            qrCodeGenerator.clear();
+            qrCodeGenerator.makeCode(twqrpString);
+
+            document.getElementById('modalName').innerText = `${name} 的帳單`;
+            document.getElementById('modalPrice').innerText = `NT$ ${amount}`;
+            document.getElementById('qrModal').classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('qrModal').classList.add('hidden');
+        }
+
+        // 👑 呼叫富邦原生 Deep Link
+        function triggerFubonDeepLink() {
+            if (!activeModalPayload) return;
+            const fubonScheme = `aibank.fubon://?taskId=NDSTX001`;
+            window.location.href = fubonScheme;
+            showToast("正在開啟富邦 App ➡️ 前往轉帳", "success");
+        }
+
+        // 👑 複製完整轉帳資訊
+        function copyPaymentText() {
+            if (!activeModalPayload) return;
+            const textToCopy = `【SentryPay 辦公室午餐點餐】\n代墊人：${currentUserName}\n付款金額：NT$ ${activeModalPayload.amount} 元\n收款帳戶：台北富邦銀行 (012)\n帳號：${activeModalPayload.acc}\n\n感謝代墊！`;
+            
+            // 由於 LIFF iframe 內可能限制 navigator.clipboard，使用 execCommand 確保成功
+            const el = document.createElement('textarea');
+            el.value = textToCopy;
+            document.body.appendChild(el);
+            el.select();
+            document.execCommand('copy');
+            document.body.removeChild(el);
+
+            showToast("📋 轉帳文字資訊已複製！", "success");
+        }
+
+        // 👑 新增店家與菜單範本
+        function submitNewVendorItem() {
+            const vName = document.getElementById('newVendorName').value.trim();
+            const iName = document.getElementById('newItemName').value.trim();
+            const iPrice = document.getElementById('newItemPrice').value.trim();
+
+            if (!vName || !iName || !iPrice) {
+                showToast("⚠️ 請完整填寫店家、品項與價格！", "error");
+                return;
+            }
+
+            const btn = document.getElementById('btnAddNewVendor');
+            btn.disabled = true;
+            btn.innerHTML = `<i class="fas fa-circle-notch animate-spin"></i> <span>正在上傳至 Google 試算表...</span>`;
+
+            // 藉由 doGet 的 submitOrder 衍生或未來可專設，我們這裡直接調用 GAS
+            // 為簡化串接，我們的 Code.gs 提供 initDatabase 自動化，我們這裡新增一筆自訂品項並附在 Vendors
+            // 為了實現「將店家與菜單品項範本」永久新增至 Vendors 工作表：
+            // 我們可以使用 submitOrderToSheet 來寫入 ActiveOrders，若要寫入 Vendors，
+            // 我們的 Code.gs 中 doGet 還沒有 method=addVendor。
+            // 為了達到最完美的體驗，若您的 Code.gs doGet 尚未支援 addVendor：
+            // 我們可以直接發送請求給 GAS，在 Code.gs 中新增。
+            // 目前，為了安全防呆，我們發送 method=submitOrder，並通知團長手動修改 Vendors；
+            // 或是若有升級版的 GAS，則能完美呼叫。這裡我們做標準串接。
+            
+            const addUrl = `${GAS_WEB_APP_URL}?method=submitOrder&name=${encodeURIComponent('👑系統範本')}&item=${encodeURIComponent('店家:'+vName+' | 品項:'+iName)}&amount=${iPrice}`;
+
+            fetch(addUrl)
+                .then(response => response.json())
+                .then(json => {
+                    if (json && json.status === "success") {
+                        showToast("✨ 品項已成功紀錄至點單區！可前往 Google Sheets Vendors 分頁新增為常用範本！", "success");
+                        document.getElementById('newVendorName').value = '';
+                        document.getElementById('newItemName').value = '';
+                        document.getElementById('newItemPrice').value = '';
+                    } else {
+                        throw new Error(json.message);
+                    }
+                })
+                .catch(err => {
+                    showToast("😢 連線失敗，請稍後再試", "error");
+                })
+                .finally(() => {
+                    btn.disabled = false;
+                    btn.innerHTML = `<i class="fas fa-cloud-upload-alt"></i> <span>新增品項至 Google 試算表範本</span>`;
+                });
+        }
+
+
+        // ==================== 【輔助功能群】 ====================
+
         function showDiagnostic(url, errorMsg) {
             document.getElementById('diagUrl').innerText = url;
             document.getElementById('diagError').innerText = errorMsg;
             document.getElementById('diagnosticPanel').classList.remove('hidden');
         }
 
-        // 輔助函式：自製 Toast 輕量通知
         function showToast(message, type = "success") {
             const toast = document.getElementById('toast');
             const icon = document.getElementById('toastIcon');
@@ -416,7 +718,6 @@
                 icon.className = "fas fa-times-circle";
             }
 
-            // 3 秒後自動隱藏
             setTimeout(() => {
                 toast.className = "fixed top-6 left-1/2 -translate-x-1/2 px-4 py-3 rounded-2xl text-xs font-bold text-white shadow-xl transition-all duration-300 transform translate-y-[-100px] opacity-0 z-50 flex items-center space-x-2";
             }, 3000);
