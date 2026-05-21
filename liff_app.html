@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>辦公室點餐助手</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap');
+        body { font-family: 'Noto Sans TC', sans-serif; background-color: #f8fafc; }
+        .loading-overlay { background: rgba(255,255,255,0.8); backdrop-filter: blur(4px); }
+    </style>
+</head>
+<body class="p-4">
+
+<div id="app" class="max-w-md mx-auto space-y-4 pb-20">
+    
+    <!-- 使用者資訊卡 -->
+    <div class="bg-white p-4 rounded-2xl shadow-sm flex items-center space-x-3 border border-slate-100">
+        <img id="userImg" class="w-12 h-12 rounded-full border-2 border-indigo-100" src="https://via.placeholder.com/150">
+        <div>
+            <p class="text-xs text-slate-400">當前使用者</p>
+            <h2 id="userName" class="font-bold text-slate-700">正在識別身分...</h2>
+        </div>
+    </div>
+
+    <!-- 店家選單 -->
+    <div class="bg-white p-5 rounded-3xl shadow-md border border-slate-100 space-y-4">
+        <h3 class="font-black text-slate-800 flex items-center">
+            <i class="fas fa-store text-indigo-500 mr-2"></i> 今日店家選單
+        </h3>
+        
+        <div id="vendorContainer" class="space-y-2">
+            <!-- 動態插入店家 -->
+            <p class="text-center py-8 text-slate-300 text-sm animate-pulse">載入店家資料中...</p>
+        </div>
+    </div>
+
+    <!-- 送出按鈕 -->
+    <div class="fixed bottom-6 left-0 right-0 px-4">
+        <button id="btnSubmit" onclick="submitOrder()" class="w-full bg-indigo-600 text-white font-bold py-4 rounded-2xl shadow-xl shadow-indigo-100 transition-all active:scale-95 disabled:bg-slate-300">
+            確認送出訂單
+        </button>
+    </div>
+</div>
+
+<!-- 讀取中遮罩 -->
+<div id="loading" class="fixed inset-0 loading-overlay z-50 flex items-center justify-center hidden">
+    <div class="text-center">
+        <div class="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+        <p class="text-xs font-bold text-indigo-600 mt-3">處理中...</p>
+    </div>
+</div>
+
+<script>
+const LIFF_ID = 'YOUR_LIFF_ID'; // 請替換成你的 LIFF ID
+const GAS_URL = 'YOUR_GAS_WEB_APP_URL'; // 請替換成你的 GAS 網址
+let currentUser = { name: '', id: '' };
+let selectedItem = null;
+
+async function initLiff() {
+    try {
+        await liff.init({ liffId: LIFF_ID });
+        if (!liff.isLoggedIn()) {
+            liff.login();
+            return;
+        }
+        
+        const profile = await liff.getProfile();
+        currentUser.name = profile.displayName;
+        currentUser.id = profile.userId;
+        
+        document.getElementById('userName').innerText = currentUser.name;
+        document.getElementById('userImg').src = profile.pictureUrl;
+        
+        fetchVendors();
+    } catch (err) {
+        console.error('LIFF 初始化失敗', err);
+    }
+}
+
+async function fetchVendors() {
+    try {
+        const res = await fetch(`${GAS_URL}?action=getVendors`);
+        const data = await res.json();
+        renderVendors(data);
+    } catch (e) {
+        alert('無法取得店家資料，請檢查 GAS 部署。');
+    }
+}
+
+function renderVendors(data) {
+    const container = document.getElementById('vendorContainer');
+    container.innerHTML = '';
+    
+    data.forEach((item, idx) => {
+        const div = document.createElement('div');
+        div.className = "p-4 border border-slate-100 rounded-2xl cursor-pointer transition-all hover:bg-slate-50";
+        div.id = `item-${idx}`;
+        div.onclick = () => selectItem(idx, item);
+        div.innerHTML = `
+            <div class="flex justify-between items-center">
+                <div>
+                    <span class="block text-xs text-slate-400">${item.vendor}</span>
+                    <span class="font-bold text-slate-700">${item.item}</span>
+                </div>
+                <span class="font-black text-indigo-600">$${item.price}</span>
+            </div>
+        `;
+        container.appendChild(div);
+    });
+}
+
+function selectItem(idx, item) {
+    selectedItem = item;
+    document.querySelectorAll('[id^="item-"]').forEach(el => {
+        el.classList.remove('ring-2', 'ring-indigo-500', 'bg-indigo-50');
+    });
+    document.getElementById(`item-${idx}`).classList.add('ring-2', 'ring-indigo-500', 'bg-indigo-50');
+}
+
+async function submitOrder() {
+    if (!selectedItem) {
+        alert('請先選擇一個品項！');
+        return;
+    }
+    
+    document.getElementById('loading').classList.remove('hidden');
+    
+    const payload = {
+        action: 'submit',
+        leader: '系統預設團長', // 這部分可從 LIFF URL 參數取得
+        vendor: selectedItem.vendor,
+        member: currentUser.name,
+        item: selectedItem.item,
+        amount: selectedItem.price
+    };
+
+    try {
+        const res = await fetch(GAS_URL, {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+        const result = await res.json();
+        
+        if (result.status === 'success') {
+            liff.sendMessages([{
+                type: 'text',
+                text: `✅ ${currentUser.name} 已成功點餐：${selectedItem.vendor} - ${selectedItem.item}`
+            }]).then(() => {
+                liff.closeWindow();
+            });
+        }
+    } catch (e) {
+        alert('送出失敗，請確認 GAS 權限。');
+    } finally {
+        document.getElementById('loading').classList.add('hidden');
+    }
+}
+
+initLiff();
+</script>
+</body>
+</html>
