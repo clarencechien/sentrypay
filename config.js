@@ -5,7 +5,7 @@ const CONFIG = {
     LIFF_ID: "2010150112-ejdkGN7h",
     
     // 2. 您的 Google Apps Script 網頁應用程式正式 URL (必須以 /exec 結尾)
-    GAS_WEB_APP_URL: "https://script.google.com/macros/s/AKfycbygvzySlZ0mnvmILLcntWWeZkVvGdJFt3TPz9UwuDDTOhqtqM7AtKagkMsFE84r-bM5/exec",
+    GAS_WEB_APP_URL: "https://script.google.com/macros/s/AKfycby0RUpBLGfUobevnMEOaMbpB8wBoww9Nu5rJbAEjxL29V6rU7PbL961oPd2iKoVOYXP/exec",
 
     // 3. 團長預設收款資訊 (抽離至設定檔，不需在 HTML 中硬編碼)
     LEADER_BANK_CODE: "012",             // 台北富邦銀行
