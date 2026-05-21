@@ -3,31 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>SentryPay 辦公室點餐助手</title>
-    <!-- Tailwind CSS -->
+    <title>辦公室點餐助手</title>
+    <!-- 載入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- FontAwesome 圖示 -->
+    <!-- 載入 FontAwesome 圖示庫 -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></link>
-    <!-- LINE LIFF SDK -->
+    <!-- 載入 LINE LIFF SDK -->
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
-    <!-- QR Code 產生器 (用於現場拆帳與個人付款) -->
+    <!-- 載入 QR Code 產生器 (用於現場或異地拆帳) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <!-- 引入獨立設定檔 -->
+    <!-- 引入獨立外部設定檔 config.js -->
     <script src="config.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap');
-        body {
-            font-family: 'Noto Sans TC', sans-serif;
-            -webkit-tap-highlight-color: transparent;
-        }
-        .gradient-bg {
-            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
-        }
+        body { font-family: 'Noto Sans TC', sans-serif; -webkit-tap-highlight-color: transparent; }
+        .gradient-bg { background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%); }
     </style>
 </head>
 <body class="bg-slate-50 min-h-screen pb-32 text-slate-800">
 
-    <!-- 頂部精美 Banner -->
+    <!-- 頂部精美外觀 Banner -->
     <div class="gradient-bg text-white px-6 pt-8 pb-16 rounded-b-[2.5rem] shadow-lg relative">
         <div class="flex items-center justify-between">
             <div>
@@ -35,20 +30,21 @@
                 <h1 class="text-2xl font-black tracking-tight mt-0.5">🍔 辦公室點餐助手</h1>
             </div>
             <div id="userAvatarContainer" class="relative">
+                <!-- 大頭貼骨架屏 -->
                 <div id="avatarPlaceholder" class="w-12 h-12 rounded-full bg-slate-700 animate-pulse"></div>
                 <img id="userAvatar" class="w-12 h-12 rounded-full border-2 border-emerald-400 hidden shadow-md" src="" alt="User Avatar">
                 <span class="absolute bottom-0 right-0 w-3.5 h-3.5 bg-emerald-500 border-2 border-slate-900 rounded-full"></span>
             </div>
         </div>
         
-        <!-- 當前使用者卡片與頁籤（僅限團長會顯示 Tab 切換） -->
-        <div class="absolute -bottom-8 left-6 right-6 bg-white text-slate-800 p-4 rounded-2xl shadow-xl border border-slate-100 flex items-center justify-between z-30">
+        <!-- 當前使用者卡片與動態頁籤列 -->
+        <div class="absolute -bottom-8 left-6 right-6 bg-white text-slate-800 p-4 rounded-2xl shadow-xl border border-slate-100 flex items-center justify-between">
             <div>
                 <p class="text-[10px] text-slate-400 font-bold uppercase">當前使用者</p>
-                <h2 id="userName" class="text-base font-bold text-slate-800 mt-0.5">載入 LINE 身分中...</h2>
+                <h2 id="userName" class="text-base font-bold text-slate-800 mt-0.5">身分識別中...</h2>
             </div>
-            <!-- 切換頁籤 (Tab Buttons) - 預設隱藏，只有 LINE 登入 ID 符合 config 中的團長 ID 才會解鎖 -->
-            <div id="tabButtons" class="flex bg-slate-100 p-1 rounded-xl hidden">
+            <!-- 切換頁籤 (Tab Buttons) - 只有被認證為今日團長的使用者才會動態解鎖顯示 -->
+            <div id="tabButtons" class="bg-slate-100 p-1 rounded-xl hidden">
                 <button onclick="switchTab('member')" id="tabBtnMember" class="bg-white text-indigo-600 text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm transition-all">
                     🍔 點餐對帳
                 </button>
@@ -62,112 +58,95 @@
     <!-- 主要內容區 -->
     <main class="px-6 mt-14 space-y-6">
 
-        <!-- 狀態提示：與 Google 雲端通訊中 -->
+        <!-- 全域與雲端資料庫連線中狀態 -->
         <div id="loadingStatus" class="bg-white p-8 rounded-3xl text-center border border-slate-100 shadow-sm">
-            <div class="inline-block animate-spin rounded-full h-8 w-8 text-indigo-600 border-4 border-solid border-current border-r-transparent align-[-0.125em]" role="status"></div>
-            <p class="text-xs text-slate-400 font-bold mt-3">正在與 Google 雲端安全連線中...</p>
+            <div class="inline-block animate-spin rounded-full h-8 text-indigo-600 border-4 border-solid border-current border-r-transparent align-[-0.125em]" role="status"></div>
+            <p class="text-xs text-slate-400 font-bold mt-3">與雲端同步狀態中...</p>
         </div>
 
-        <!-- ==================== 【分流視角 1：點餐中（ORDERING）】 ==================== -->
+        <!-- ==================== 【視角 1：點餐中（ORDERING）】 ==================== -->
         <div id="stageOrdering" class="space-y-6 hidden">
-            <!-- 歷史已點提醒橫幅 (方便團員確認自己今天點了什麼，並可繼續追加) -->
-            <div id="orderedNotice" class="bg-amber-50 border border-amber-100 p-4 rounded-2xl hidden">
-                <p class="text-xs text-amber-800 font-bold flex items-center">
-                    <i class="fas fa-bell mr-1.5 animate-bounce"></i>
-                    <span>您今日已點購：<span id="orderedItemText" class="underline"></span></span>
+            <!-- 歷史已點累加提醒橫幅 -->
+            <div id="orderedNotice" class="bg-emerald-50 border border-emerald-100 p-4 rounded-2xl hidden">
+                <p class="text-xs text-emerald-800 font-bold flex items-center">
+                    <i class="fas fa-bell mr-1.5 animate-pulse text-emerald-600"></i>
+                    <span>你今日已下單：<span id="orderedItemText" class="underline"></span></span>
                 </p>
-                <p class="text-[10px] text-amber-600 mt-1">您可以繼續在下方加選品項送出，系統會自動在您今日的帳單中進行追加！</p>
+                <p class="text-[10px] text-emerald-600 mt-1">您可以隨時在下方繼續勾選餐點送出，系統會自動在您的對帳單中幫您合流累加！</p>
             </div>
 
-            <!-- 店家與菜單卡片區 -->
-            <div id="menuContainer" class="space-y-6">
-                <!-- 由 JS 動態生成多個店家的選單卡片 -->
-            </div>
+            <!-- 菜單店家動態渲染區 -->
+            <div id="menuContainer" class="space-y-6"></div>
 
-            <!-- 自訂品項/金額（折疊卡片） -->
+            <!-- 自訂品項折疊卡片 -->
             <div id="customItemCard" class="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm">
                 <button onclick="toggleCustomItem()" class="w-full flex items-center justify-between text-left">
                     <div class="flex items-center space-x-2">
-                        <div class="bg-amber-50 text-amber-600 w-8 h-8 rounded-xl flex items-center justify-center text-xs">
-                            <i class="fas fa-plus-circle"></i>
-                        </div>
+                        <div class="bg-amber-50 text-amber-600 w-8 h-8 rounded-xl flex items-center justify-center text-xs"><i class="fas fa-plus-circle"></i></div>
                         <div>
-                            <h3 class="text-xs font-bold text-slate-700">想點菜單上沒有的東西？</h3>
-                            <p class="text-[10px] text-slate-400">點此展開填寫自訂品項與金額</p>
+                            <h3 class="text-xs font-bold text-slate-700">點餐菜單外的其他品項？</h3>
+                            <p class="text-[10px] text-slate-400">展開填寫自訂餐點與單價</p>
                         </div>
                     </div>
                     <i id="customArrow" class="fas fa-chevron-down text-slate-400 text-xs transition-transform duration-200"></i>
                 </button>
-                
                 <div id="customFields" class="hidden mt-4 pt-4 border-t border-slate-100 space-y-3">
-                    <div>
-                        <label class="text-[10px] text-slate-400 font-bold block mb-1">自訂品項名稱</label>
-                        <input type="text" id="customName" placeholder="例如：炸雞排、大杯紅茶" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:border-indigo-500 transition-colors">
-                    </div>
-                    <div>
-                        <label class="text-[10px] text-slate-400 font-bold block mb-1">自訂金額 (NT$)</label>
-                        <input type="number" id="customPrice" placeholder="例如：85" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-right focus:outline-none focus:border-indigo-500 transition-colors">
-                    </div>
+                    <input type="text" id="customName" placeholder="品項名稱 (如: 勁辣雞腿堡)" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:border-indigo-500 transition-all">
+                    <input type="number" id="customPrice" placeholder="金額 (如: 95)" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-right focus:outline-none focus:border-indigo-500 transition-all">
                 </div>
             </div>
         </div>
 
-
-        <!-- ==================== 【分流視角 2：對帳收款中（SETTLING）】 ==================== -->
+        <!-- ==================== 【視角 2：對帳收款中（SETTLING）】 ==================== -->
         <div id="stageSettling" class="space-y-6 hidden">
-            <!-- 團員個人專屬帳單卡片 -->
+            <!-- 團員個人專屬待繳帳單 -->
             <div id="userBillCard" class="bg-white rounded-3xl p-6 border border-slate-100 shadow-xl space-y-5 text-center hidden">
-                <div class="bg-indigo-50 text-indigo-700 text-xs font-black px-4 py-1.5 rounded-full inline-block">
-                    📢 您的個人待付款對帳單
-                </div>
-                
-                <div class="py-2">
-                    <h3 class="text-xs text-slate-400 font-bold uppercase tracking-wider">應付總金額</h3>
-                    <div class="text-4xl font-black text-slate-900 mt-1" id="billAmount">NT$ 0</div>
+                <span class="bg-indigo-50 text-indigo-700 text-[10px] font-black px-3 py-1 rounded-full inline-block">
+                    📢 今日個人待繳帳單
+                </span>
+                <div>
+                    <h3 class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">應轉帳總金額</h3>
+                    <div class="text-4xl font-black text-slate-900 mt-1" id="billAmount">$ 0</div>
                 </div>
 
-                <div class="bg-slate-50 rounded-2xl p-4 text-left space-y-2 text-xs">
-                    <div class="flex justify-between border-b border-slate-100 pb-2">
-                        <span class="text-slate-400">點購明細：</span>
-                        <span class="font-bold text-slate-700 break-all text-right max-w-[200px]" id="billItems">-</span>
+                <div class="bg-slate-50 rounded-2xl p-4 text-left space-y-1.5 text-xs">
+                    <div class="flex justify-between border-b border-slate-100 pb-1.5">
+                        <span class="text-slate-400">我的餐點：</span>
+                        <span class="font-bold text-slate-700 text-right max-w-[180px] break-all" id="billItems">-</span>
                     </div>
                     <div class="flex justify-between pt-1">
+                        <span class="text-slate-400">收款團長：</span>
+                        <span class="font-bold text-emerald-600" id="billLeaderName">今日團長</span>
+                    </div>
+                    <div class="flex justify-between">
                         <span class="text-slate-400">收款網銀：</span>
-                        <span class="font-bold text-slate-700" id="billBankInfo">台北富邦 (012)</span>
+                        <span class="font-bold text-slate-700" id="billBankInfo">富邦銀行 (012)</span>
                     </div>
                     <div class="flex justify-between">
                         <span class="text-slate-400">收款帳號：</span>
-                        <span class="font-mono font-bold text-indigo-600" id="billAccText">-</span>
+                        <span class="font-mono font-bold text-indigo-600 tracking-wider" id="billAccText">-</span>
                     </div>
                 </div>
 
-                <!-- 付款狀態指示燈 -->
-                <div id="paymentStatusBox" class="p-3.5 rounded-2xl text-xs font-bold">
-                    狀態：載入中
-                </div>
+                <!-- 繳款狀態指示燈 -->
+                <div id="paymentStatusBox" class="p-3 rounded-2xl text-xs font-bold"></div>
 
-                <!-- 付款操作按鈕 -->
+                <!-- 繳款操作控制區 -->
                 <div id="paymentActionArea" class="space-y-2">
-                    <!-- TWQRP QR 現場掃碼 -->
-                    <div id="qrArea" class="bg-slate-50 rounded-2xl p-4 inline-block shadow-inner w-full flex flex-col items-center">
+                    <div class="bg-slate-50 rounded-2xl p-4 inline-block shadow-inner w-full flex flex-col items-center">
                         <div id="userQrcode" class="flex justify-center p-2 bg-white rounded-xl shadow-sm"></div>
-                        <p class="text-[10px] text-slate-400 mt-2">請拿起裝有富邦/玉山/郵局的手機掃描此條碼自動填入金額</p>
+                        <p class="text-[9px] text-slate-400 mt-2">請使用行動網銀 App 的「掃碼」功能對準此處 (自動帶入金額)</p>
                     </div>
 
-                    <!-- 📱 手機一鍵喚醒富邦 -->
                     <button onclick="triggerFubonDeepLink()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-3.5 rounded-2xl transition-all flex items-center justify-center space-x-1.5 shadow-md">
                         <i class="fas fa-mobile-alt animate-bounce"></i>
-                        <span>📱 喚醒富邦行動網銀一鍵付款</span>
+                        <span>📱 手機一鍵喚醒富邦網銀轉帳</span>
                     </button>
-
-                    <!-- 複製文字 -->
                     <button onclick="copyPaymentText()" class="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold py-2.5 rounded-xl transition-all flex items-center justify-center space-x-1">
                         <i class="fas fa-copy"></i>
                         <span>複製完整轉帳文字資訊</span>
                     </button>
-
-                    <!-- 回報付款 -->
-                    <button onclick="reportPayment()" id="btnReportPay" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-3.5 rounded-2xl transition-all flex items-center justify-center space-x-1.5 shadow-md">
+                    <button onclick="reportPayment()" id="btnReportPay" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-3 rounded-2xl shadow-md flex items-center justify-center space-x-1">
                         <i class="fas fa-check-circle"></i>
                         <span>🙋 我已完成轉帳，通知團長對帳</span>
                     </button>
@@ -175,302 +154,167 @@
             </div>
 
             <!-- 同事今天沒有點餐提示 -->
-            <div id="userNoBillNotice" class="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm text-center hidden">
+            <div id="userNoBillNotice" class="bg-white rounded-3xl p-8 border border-slate-100 text-center hidden">
                 <div class="text-slate-300 text-4xl"><i class="fas fa-receipt"></i></div>
-                <h3 class="text-sm font-bold text-slate-700 mt-3">今日點餐已截止</h3>
-                <p class="text-xs text-slate-400 mt-1">您今天沒有下單，不需要付費對帳喔！</p>
+                <h3 class="text-xs font-bold text-slate-700 mt-2">今日點餐已截止</h3>
+                <p class="text-[10px] text-slate-400 mt-0.5">您今天沒有下單，不需付費對帳喔！</p>
             </div>
         </div>
 
-
-        <!-- ==================== 【頁籤 2：團長主控台畫面】 ==================== -->
+        <!-- ==================== 【頁籤 2：👑 團長主控台畫面】 ==================== -->
         <div id="tabContentLeader" class="hidden space-y-6">
-            
-            <!-- 1. 目前進行階段管理 -->
+            <!-- 1. 階段控制台 -->
             <div class="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm space-y-3">
-                <div class="flex items-center space-x-2 text-indigo-600">
-                    <i class="fas fa-tasks text-sm"></i>
-                    <h3 class="text-xs font-bold uppercase tracking-wider">開團階段管理</h3>
-                </div>
+                <div class="flex items-center space-x-2 text-indigo-600"><i class="fas fa-tasks text-sm"></i><h3 class="text-xs font-bold uppercase tracking-wider">當前進行階段管理</h3></div>
                 <div class="grid grid-cols-2 gap-2 text-xs">
-                    <button onclick="changeSystemStage('ORDERING')" id="btnStageOrdering" class="py-2.5 rounded-xl font-bold border transition-all">
-                        🍔 點餐及追加中
-                    </button>
-                    <button onclick="changeSystemStage('SETTLING')" id="btnStageSettling" class="py-2.5 rounded-xl font-bold border transition-all">
-                        📢 發起結帳與收款
-                    </button>
+                    <button onclick="changeSystemStage('ORDERING')" id="btnStageOrdering" class="py-2.5 rounded-xl font-bold border transition-all">🍔 開放點餐追加</button>
+                    <button onclick="changeSystemStage('SETTLING')" id="btnStageSettling" class="py-2.5 rounded-xl font-bold border transition-all">📢 發起結帳收錢</button>
                 </div>
-                <p class="text-[9px] text-slate-400 leading-relaxed">
-                    * 發起結帳時，系統會自動在 LINE 群組廣播<b>「結帳對帳通知卡片」</b>。此時一般同仁打開網頁，將自動被強制跳轉至其個人專屬帳單與轉帳付款頁面。
-                </p>
             </div>
 
-            <!-- 2. 設定團長收款帳號 -->
+            <!-- 2. 收款帳戶設定 -->
             <div class="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm space-y-3">
-                <div class="flex items-center space-x-2 text-indigo-600">
-                    <i class="fas fa-wallet text-sm"></i>
-                    <h3 class="text-xs font-bold uppercase tracking-wider">我的富邦收款帳號 (用於產生 TWQRP)</h3>
-                </div>
+                <div class="flex items-center space-x-2 text-indigo-600"><i class="fas fa-wallet text-sm"></i><h3 class="text-xs font-bold uppercase tracking-wider">填寫我個人的收款帳戶 (富邦)</h3></div>
                 <div class="grid grid-cols-3 gap-2">
-                    <div>
-                        <label class="text-[9px] text-slate-400 block mb-0.5">銀行代碼</label>
-                        <input type="text" id="leaderBank" readonly class="w-full bg-slate-100 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-center text-slate-500">
-                    </div>
-                    <div class="col-span-2">
-                        <label class="text-[9px] text-slate-400 block mb-0.5">台北富邦帳號 (14碼)</label>
-                        <input type="text" id="leaderAcc" placeholder="請輸入您的帳號" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-mono font-bold tracking-wide focus:outline-none focus:border-indigo-500">
-                    </div>
+                    <input type="text" id="leaderBank" readonly class="bg-slate-100 border rounded-xl p-2.5 text-xs font-bold text-center text-slate-500">
+                    <input type="text" id="leaderAcc" placeholder="請填寫你的富邦帳號" class="col-span-2 bg-slate-50 border rounded-xl p-2.5 text-xs font-mono font-bold tracking-wide focus:border-indigo-500">
                 </div>
             </div>
 
-            <!-- 3. 今日即時點單對帳狀態監控 -->
+            <!-- 3. 全體對帳列表 -->
             <div class="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm space-y-3">
-                <div class="flex items-center justify-between pb-2 border-b border-slate-100">
-                    <div class="flex items-center space-x-2 text-emerald-600">
-                        <i class="fas fa-clipboard-list text-sm"></i>
-                        <h3 class="text-xs font-bold uppercase tracking-wider">今日點餐及對帳狀態</h3>
-                    </div>
-                    <button onclick="syncActiveOrders()" class="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-[10px] font-bold px-3 py-1.5 rounded-xl flex items-center space-x-1 transition-all">
-                        <i class="fas fa-sync-alt"></i>
-                        <span>同步最新點單</span>
-                    </button>
+                <div class="flex items-center justify-between pb-1 border-b">
+                    <div class="flex items-center space-x-2 text-emerald-600"><i class="fas fa-clipboard-list text-sm"></i><h3 class="text-xs font-bold uppercase tracking-wider">全體點餐及對帳狀態</h3></div>
+                    <button onclick="syncActiveOrders()" class="bg-emerald-50 text-emerald-700 text-[10px] font-bold px-2.5 py-1.5 rounded-xl"><i class="fas fa-sync-alt mr-1"></i>同步明細</button>
                 </div>
-                
-                <div id="activeOrdersContainer" class="space-y-2 max-h-60 overflow-y-auto">
-                    <p class="text-center py-4 text-[11px] text-slate-400">點擊「同步最新點單」載入當日資料</p>
-                </div>
-
+                <div id="activeOrdersContainer" class="space-y-2 max-h-60 overflow-y-auto"></div>
                 <div class="bg-slate-50 p-3 rounded-2xl flex justify-between items-center text-xs">
                     <span class="font-bold text-slate-500">當日累計總金額：</span>
                     <span id="activeTotalSum" class="font-black text-emerald-600 text-sm">NT$ 0</span>
                 </div>
-
-                <button onclick="archiveTodayOrders()" id="btnArchive" class="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold py-3 rounded-2xl text-xs transition-all flex items-center justify-center space-x-1">
-                    <i class="fas fa-check-double"></i>
-                    <span>全數收訖，關閉本團並歸檔</span>
-                </button>
-            </div>
-
-            <!-- 4. 新增常用店家與品項範本 -->
-            <div class="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm space-y-3">
-                <div class="flex items-center space-x-2 text-indigo-600">
-                    <i class="fas fa-plus-circle text-sm"></i>
-                    <h3 class="text-xs font-bold uppercase tracking-wider">新增常用店家與品項</h3>
-                </div>
-                <div class="space-y-3 pt-1 text-xs">
-                    <div class="grid grid-cols-2 gap-2">
-                        <div>
-                            <label class="text-[9px] text-slate-400 block mb-0.5">店家名稱</label>
-                            <input type="text" id="newVendorName" placeholder="如：池上木片便當" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5">
-                        </div>
-                        <div>
-                            <label class="text-[9px] text-slate-400 block mb-0.5">品項名稱</label>
-                            <input type="text" id="newItemName" placeholder="如：炸雞腿飯" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5">
-                        </div>
-                    </div>
-                    <div>
-                        <label class="text-[9px] text-slate-400 block mb-0.5">品項金額 (NT$)</label>
-                        <input type="number" id="newItemPrice" placeholder="如：120" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-right">
-                    </div>
-                    <button onclick="submitNewVendorItem()" id="btnAddNewVendor" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-xl transition-all flex items-center justify-center space-x-1.5">
-                        <i class="fas fa-cloud-upload-alt"></i>
-                        <span>新增品項至 Google 試算表範本</span>
-                    </button>
-                </div>
+                <button onclick="archiveTodayOrders()" id="btnArchive" class="w-full bg-rose-600 text-white font-bold py-3 rounded-xl text-xs"><i class="fas fa-check-double mr-1"></i>確認全數收訖，清空結案</button>
             </div>
         </div>
 
-
-        <!-- ==================== 【🛠️ 開發者診斷面板】 ==================== -->
-        <div id="diagnosticPanel" class="hidden bg-rose-50 border border-rose-100 rounded-3xl p-5 space-y-3">
-            <div class="flex items-center space-x-2 text-rose-700">
-                <i class="fas fa-exclamation-triangle"></i>
-                <h3 class="text-xs font-black">🛠️ 開發者診斷回報</h3>
-            </div>
-            <p class="text-[11px] text-rose-600 leading-relaxed">
-                系統與 Google 試算表通訊失敗。請檢查您的網頁代碼中的 <b>GAS_WEB_APP_URL</b> 是否為以 <code>/exec</code> 結尾的正式網址，並確認 GAS 部署時的存取權限是否設為「所有人 (Anyone)」。
-            </p>
-            <div class="bg-rose-950 text-rose-100 rounded-xl p-3 text-[9px] font-mono overflow-x-auto space-y-1">
-                <p><b>[嘗試連線的 API 網址]</b></p>
-                <p id="diagUrl" class="break-all text-amber-300"></p>
-                <p class="pt-2"><b>[瀏覽器錯誤日誌]</b></p>
-                <p id="diagError" class="break-all text-rose-300"></p>
-            </div>
+        <!-- 🛠️ 開發者診斷面板 -->
+        <div id="diagnosticPanel" class="hidden bg-rose-50 border rounded-3xl p-5 text-[10px] font-mono">
+            <div class="text-rose-700 font-bold mb-1">🛠️ 診斷報告</div>
+            <p id="diagUrl" class="break-all text-amber-600"></p>
+            <p id="diagError" class="break-all text-rose-500 pt-1"></p>
         </div>
-
     </main>
 
-    <!-- 底部固定結帳懸浮列 (點餐頁籤專用) -->
-    <div id="stickyFooter" class="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-100 px-6 py-4 flex items-center justify-between z-40 shadow-[0_-8px_30px_rgb(0,0,0,0.04)] hidden">
-        <div>
-            <p class="text-[10px] text-slate-400 font-bold uppercase">今日點餐總計</p>
-            <p class="text-2xl font-black text-slate-900 mt-0.5" id="totalPriceDisplay">NT$ 0</p>
-        </div>
-        <button onclick="submitOrder()" id="btnSubmit" disabled class="bg-slate-300 text-slate-500 font-bold px-6 py-3.5 rounded-2xl text-xs transition-all shadow-md flex items-center space-x-1.5 cursor-not-allowed">
-            <i class="fas fa-paper-plane"></i>
-            <span>確認送出訂單</span>
-        </button>
+    <!-- 底部固定懸浮欄 (點餐階段專用) -->
+    <div id="stickyFooter" class="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t px-6 py-4 flex items-center justify-between z-40 hidden shadow-md">
+        <div><p class="text-[9px] text-slate-400 font-bold uppercase">本次選擇累計</p><p class="text-2xl font-black text-slate-900" id="totalPriceDisplay">NT$ 0</p></div>
+        <button onclick="submitOrder()" id="btnSubmit" disabled class="bg-slate-300 text-slate-500 font-bold px-6 py-3.5 rounded-2xl text-xs transition-all cursor-not-allowed"><i class="fas fa-paper-plane mr-1"></i>確認送出訂單</button>
     </div>
 
-    <!-- ==================== 【👑 團長手動現場查帳對帳彈窗 (Modal)】 ==================== -->
+    <!-- 團長手動對帳確認彈窗 (Modal) -->
     <div id="qrModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-white w-full max-w-sm rounded-3xl p-6 text-center shadow-xl relative">
-            <button onclick="closeModal()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600">
-                <i class="fas fa-times-circle text-xl"></i>
-            </button>
-            
-            <span class="bg-indigo-50 text-indigo-800 text-[10px] font-bold px-2.5 py-1 rounded-full inline-block mb-1">
-                SentryPay 團長手動確認收款
-            </span>
-            <h3 class="text-xl font-bold text-slate-800" id="modalName">同事姓名</h3>
-            
-            <!-- 現場手動收款按鈕 -->
-            <div class="bg-slate-100 rounded-2xl p-4 inline-block shadow-inner mb-4 w-full">
-                <p class="text-xs text-slate-500 mb-1">對帳應收金額</p>
-                <div class="text-3xl font-black text-slate-900" id="modalPrice">NT$ 0</div>
-            </div>
-
-            <button onclick="confirmReceivedCash()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-3.5 rounded-2xl transition-all flex items-center justify-center space-x-1.5 shadow-md">
-                <i class="fas fa-check-double"></i>
-                <span>💵 確認已收到此筆款項 (完成對帳)</span>
-            </button>
+        <div class="bg-white w-full max-w-sm rounded-3xl p-6 text-center relative shadow-xl">
+            <button onclick="closeModal()" class="absolute top-4 right-4 text-slate-400"><i class="fas fa-times-circle text-xl"></i></button>
+            <span class="bg-indigo-50 text-indigo-800 text-[9px] font-bold px-2 py-0.5 rounded-full inline-block mb-1">查帳審查核對</span>
+            <h3 class="text-base font-bold text-slate-800 mb-4" id="modalName">-</h3>
+            <div class="bg-slate-100 rounded-2xl p-4 mb-4"><p class="text-[10px] text-slate-400">該成員應付</p><div class="text-2xl font-black text-slate-900 mt-0.5" id="modalPrice">NT$ 0</div></div>
+            <button onclick="confirmReceivedCash()" class="w-full bg-emerald-600 text-white text-xs font-bold py-3.5 rounded-xl shadow-md flex items-center justify-center space-x-1"><i class="fas fa-check-double"></i><span>💵 我已在網銀確認收到款項 (核對成功)</span></button>
         </div>
     </div>
 
-    <!-- 成功與失敗的提示通知 (Toast) -->
-    <div id="toast" class="fixed top-6 left-1/2 -translate-x-1/2 px-4 py-3 rounded-2xl text-xs font-bold text-white shadow-xl transition-all duration-300 transform translate-y-[-100px] opacity-0 z-50 flex items-center space-x-2">
-        <i id="toastIcon" class="fas"></i>
-        <span id="toastText">訊息</span>
+    <!-- 系統通知 Toast -->
+    <div id="toast" class="fixed top-6 left-1/2 -translate-x-1/2 px-4 py-3 rounded-2xl text-xs font-bold text-white shadow-xl flex items-center space-x-2 opacity-0 translate-y-[-100px] z-50 transition-all duration-300">
+        <i id="toastIcon" class="fas"></i><span id="toastText">-</span>
     </div>
 
     <script>
-        // ==================== 【安全讀取 config.js 參數】 ====================
-        const LIFF_ID = typeof CONFIG !== 'undefined' ? CONFIG.LIFF_ID : "2010151157-g6292b67";
-        const GAS_WEB_APP_URL = typeof CONFIG !== 'undefined' ? CONFIG.GAS_WEB_APP_URL : "https://script.google.com/macros/s/AKfycbwixAWr_W0YZRfMOD20vPQCgD4j0wR2e8XgTz6vPof_G72-88jX2fBqZ4q_6Y3p_Sg0/exec";
-
-        // ==================== 【全域狀態變數】 ====================
+        // ==================== 【全域變數】 ====================
         let currentUserName = "測試同事";
         let currentUserAvatar = "";
         let menuData = [];
         let selectedItems = {}; 
         let isCustomOpen = false;
-        let qrCodeGenerator = null;
         let activeModalPayload = null;
-        let currentSystemStage = "ORDERING"; // "ORDERING" 點餐中 / "SETTLING" 結帳中
-        let isLeaderUser = false; // 是否為合法團長
+        let currentSystemStage = "ORDERING";
+        let isLeaderUser = false;
+        let dynamicLeaderName = "今日團長";
+
+        // ==================== 【安全讀取 config.js 參數】 ====================
+        const LIFF_ID = typeof CONFIG !== 'undefined' ? CONFIG.LIFF_ID : "2010151157-g6292b67";
+        const GAS_WEB_APP_URL = typeof CONFIG !== 'undefined' ? CONFIG.GAS_WEB_APP_URL : "https://script.google.com/macros/s/AKfycbwixAWr_W0YZRfMOD20vPQCgD4j0wR2e8XgTz6vPof_G72-88jX2fBqZ4q_6Y3p_Sg0/exec";
 
         window.onload = function() {
-            // 初始化載入團長收款預設資訊
             if (typeof CONFIG !== 'undefined') {
-                document.getElementById('leaderBank').value = CONFIG.LEADER_BANK_CODE;
-                document.getElementById('leaderAcc').value = CONFIG.LEADER_ACCOUNT;
+                document.getElementById('leaderBank').value = CONFIG.DEFAULT_BANK_CODE;
             }
             initLIFF();
         };
 
-        // LINE LIFF 初始化
+        // LINE LIFF 初始化登入與身分檢查
         function initLIFF() {
             liff.init({ liffId: LIFF_ID })
                 .then(() => {
-                    if (!liff.isLoggedIn()) {
-                        liff.login();
-                    } else {
-                        liff.getProfile()
-                            .then(profile => {
-                                currentUserName = profile.displayName;
-                                currentUserAvatar = profile.pictureUrl;
-                                
-                                document.getElementById('userName').innerText = currentUserName;
-                                if (currentUserAvatar) {
-                                    const avatarImg = document.getElementById('userAvatar');
-                                    avatarImg.src = currentUserAvatar;
-                                    avatarImg.classList.remove('hidden');
-                                    document.getElementById('avatarPlaceholder').classList.add('hidden');
-                                }
-                                
-                                // 判斷登入者是否為合法管理員/團長
-                                if (typeof CONFIG !== 'undefined' && profile.userId === CONFIG.LEADER_LINE_ID) {
-                                    isLeaderUser = true;
-                                    document.getElementById('tabButtons').classList.remove('hidden');
-                                }
-                                
-                                // 獲取當前開團階段與點單狀態
-                                syncSystemState(profile.userId, currentUserName);
-                            })
-                            .catch(err => {
-                                console.error('取得 LINE Profile 失敗:', err);
-                                showDiagnostic("LINE Profile Error", err.toString());
-                                syncSystemState("test-user", currentUserName);
-                            });
+                    if (!liff.isLoggedIn()) { liff.login(); } 
+                    else {
+                        liff.getProfile().then(profile => {
+                            currentUserName = profile.displayName;
+                            currentUserAvatar = profile.pictureUrl;
+                            document.getElementById('userName').innerText = currentUserName;
+                            if (currentUserAvatar) {
+                                const img = document.getElementById('userAvatar');
+                                img.src = currentUserAvatar; img.classList.remove('hidden');
+                                document.getElementById('avatarPlaceholder').classList.add('hidden');
+                            }
+                            syncSystemState(profile.userId, currentUserName);
+                        }).catch(err => syncSystemState("test-user", currentUserName));
                     }
-                })
-                .catch(err => {
-                    console.error('LIFF 初始化失敗:', err);
-                    showDiagnostic("LIFF Init Error", err.toString());
-                    document.getElementById('userName').innerText = "測試同事 (外置瀏覽器開發中)";
+                }).catch(err => {
+                    document.getElementById('userName').innerText = "測試同仁 (本地模式)";
                     syncSystemState("test-user", currentUserName);
                 });
         }
 
-        // 同步系統狀態機與角色路由分流
+        // 向 GAS 雲端同步系統當前狀態機與權限
         function syncSystemState(userId, name) {
             const stateUrl = `${GAS_WEB_APP_URL}?method=getSystemState&userId=${userId}&name=${encodeURIComponent(name)}`;
-            
-            fetch(stateUrl)
-                .then(response => {
-                    if (!response.ok) throw new Error(`HTTP 錯誤碼: ${response.status}`);
-                    return response.json();
-                })
-                .then(json => {
-                    if (json && json.status === "success") {
-                        currentSystemStage = json.stage;
-                        const userOrder = json.userOrder;
-                        
-                        // 更新管理端頁籤
-                        updateLeaderStageButtons();
-                        
-                        // 開團狀態分流
-                        if (currentSystemStage === "ORDERING") {
-                            // 【點餐中階段】
-                            document.getElementById('stageOrdering').classList.remove('hidden');
-                            document.getElementById('stageSettling').classList.add('hidden');
-                            document.getElementById('stickyFooter').classList.remove('hidden');
-                            
-                            // 若此成員今日已經有點餐，顯示溫馨提示並支援追加
-                            if (userOrder) {
-                                document.getElementById('orderedItemText').innerText = `${userOrder.item} (NT$ ${userOrder.amount})`;
-                                document.getElementById('orderedNotice').classList.remove('hidden');
-                            } else {
-                                document.getElementById('orderedNotice').classList.add('hidden');
-                            }
-                            fetchMenuData(); // 載入店家菜單
-                        } else {
-                            // 【結帳中階段】
-                            document.getElementById('stageOrdering').classList.add('hidden');
-                            document.getElementById('stageSettling').classList.remove('hidden');
-                            document.getElementById('stickyFooter').classList.add('hidden');
-                            
-                            // 渲染個人待付款帳單
-                            renderPersonalBill(userOrder);
+            fetch(stateUrl).then(res => res.json()).then(json => {
+                if (json && json.status === "success") {
+                    currentSystemStage = json.stage;
+                    isLeaderUser = json.isLeader;
+                    dynamicLeaderName = json.leaderName;
+
+                    // 🎯 核心權限分流：如果被 GAS 認證是今日開團的真團長，解鎖頂部主控台頁籤！
+                    if (isLeaderUser) { document.getElementById('tabButtons').classList.remove('hidden'); }
+                    
+                    updateLeaderStageButtons();
+                    if (json.account) document.getElementById('leaderAcc').value = json.account;
+
+                    if (currentSystemStage === "ORDERING") {
+                        // 點餐追加中
+                        document.getElementById('stageOrdering').classList.remove('hidden');
+                        document.getElementById('stageSettling').classList.add('hidden');
+                        document.getElementById('stickyFooter').classList.remove('hidden');
+                        if (json.userOrder) {
+                            document.getElementById('orderedItemText').innerText = `${json.userOrder.item} (NT$ ${json.userOrder.amount})`;
+                            document.getElementById('orderedNotice').classList.remove('hidden');
                         }
-                        
-                        document.getElementById('loadingStatus').classList.add('hidden');
+                        fetchMenuData();
                     } else {
-                        throw new Error(json.message);
+                        // 結帳對帳中
+                        document.getElementById('stageOrdering').classList.add('hidden');
+                        document.getElementById('stageSettling').classList.remove('hidden');
+                        document.getElementById('stickyFooter').classList.add('hidden');
+                        renderPersonalBill(json.userOrder, json.bankCode, json.account);
                     }
-                })
-                .catch(err => {
-                    console.error('系統狀態同步失敗:', err);
-                    showDiagnostic(stateUrl, err.toString());
-                });
+                    document.getElementById('loadingStatus').classList.add('hidden');
+                }
+            }).catch(err => showDiagnostic(stateUrl, err.toString()));
         }
 
-        // 頁籤切換 (僅限團長)
+        // 頁籤切換控制
         function switchTab(tab) {
             const btnMember = document.getElementById('tabBtnMember');
             const btnLeader = document.getElementById('tabBtnLeader');
             const contentLeader = document.getElementById('tabContentLeader');
-            
             const stageOrdering = document.getElementById('stageOrdering');
             const stageSettling = document.getElementById('stageSettling');
             const stickyFooter = document.getElementById('stickyFooter');
@@ -479,554 +323,178 @@
                 btnMember.className = "bg-white text-indigo-600 text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm transition-all";
                 btnLeader.className = "text-slate-500 text-xs font-bold px-3 py-1.5 rounded-lg transition-all";
                 contentLeader.classList.add('hidden');
-                
-                // 返回點餐付款，依開團階段進行分流
-                if (currentSystemStage === "ORDERING") {
-                    stageOrdering.classList.remove('hidden');
-                    stickyFooter.classList.remove('hidden');
-                } else {
-                    stageSettling.classList.remove('hidden');
-                }
+                if (currentSystemStage === "ORDERING") { stageOrdering.classList.remove('hidden'); stickyFooter.classList.remove('hidden'); } 
+                else { stageSettling.classList.remove('hidden'); }
             } else {
                 btnLeader.className = "bg-white text-indigo-600 text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm transition-all";
                 btnMember.className = "text-slate-500 text-xs font-bold px-3 py-1.5 rounded-lg transition-all";
                 contentLeader.classList.remove('hidden');
-                stageOrdering.classList.add('hidden');
-                stageSettling.classList.add('hidden');
-                stickyFooter.classList.add('hidden');
-                
-                syncActiveOrders(); // 同步取得當前所有人點餐進度
+                stageOrdering.classList.add('hidden'); stageSettling.classList.add('hidden'); stickyFooter.classList.add('hidden');
+                syncActiveOrders();
             }
         }
 
-        // ==================== 【分流視角 1: 點餐與追加】 ====================
-
+        // 取得常用店家菜單
         function fetchMenuData() {
-            const fetchUrl = `${GAS_WEB_APP_URL}?method=getVendors`;
-            fetch(fetchUrl)
-                .then(response => response.json())
-                .then(json => {
-                    if (json && json.status === "success") {
-                        menuData = json.data;
-                        renderMenu(menuData);
-                    }
-                })
-                .catch(err => console.error(err));
+            fetch(`${GAS_WEB_APP_URL}?method=getVendors`).then(res => res.json()).then(json => {
+                if (json && json.status === "success") renderMenu(json.data);
+            });
         }
 
+        // 動態渲染菜單介面
         function renderMenu(data) {
-            const container = document.getElementById('menuContainer');
-            container.innerHTML = '';
-
+            const container = document.getElementById('menuContainer'); container.innerHTML = '';
             const grouped = {};
-            data.forEach(item => {
-                if (!grouped[item.vendor]) grouped[item.vendor] = [];
-                grouped[item.vendor].push(item);
-            });
-
-            Object.keys(grouped).forEach(vendorName => {
-                const vendorCard = document.createElement('div');
-                vendorCard.className = "bg-white rounded-3xl p-5 border border-slate-100 shadow-sm space-y-3";
-                let vendorIcon = vendorName.includes('咖啡') || vendorName.includes('星巴克') ? 'fa-coffee text-amber-700 bg-amber-50' : 'fa-utensils text-emerald-600 bg-emerald-50';
-                vendorCard.innerHTML = `
-                    <div class="flex items-center space-x-2.5 pb-2 border-b border-slate-50">
-                        <div class="${vendorIcon} w-9 h-9 rounded-2xl flex items-center justify-center text-sm"></div>
-                        <h3 class="text-sm font-bold text-slate-800">${vendorName}</h3>
-                    </div>
-                    <div class="space-y-2" id="items-${vendorName.replace(/\s+/g, '')}"></div>
-                `;
-                container.appendChild(vendorCard);
-                const itemsContainer = document.getElementById(`items-${vendorName.replace(/\s+/g, '')}`);
-
-                grouped[vendorName].forEach(p => {
-                    const itemRow = document.createElement('label');
-                    itemRow.className = "flex items-center justify-between bg-slate-50/50 hover:bg-slate-50 active:scale-[0.98] px-3.5 py-3 rounded-2xl cursor-pointer border border-slate-100 transition-all";
-                    itemRow.innerHTML = `
-                        <div class="flex items-center space-x-3">
-                            <input type="checkbox" name="foodItem" value="${p.item}" data-price="${p.price}" onchange="handleItemSelect(this)" class="w-5 h-5 rounded-lg text-emerald-600 border-slate-200 focus:ring-0 focus:ring-offset-0 cursor-pointer">
-                            <span class="text-xs font-bold text-slate-700">${p.item}</span>
-                        </div>
-                        <span class="text-xs font-black text-slate-900">NT$ ${p.price}</span>
-                    `;
-                    itemsContainer.appendChild(itemRow);
+            data.forEach(item => { if (!grouped[item.vendor]) grouped[item.vendor] = []; grouped[item.vendor].push(item); });
+            Object.keys(grouped).forEach(v => {
+                const card = document.createElement('div');
+                card.className = "bg-white rounded-3xl p-5 border border-slate-100 shadow-sm space-y-3";
+                let icon = v.includes('咖啡') || v.includes('星巴克') ? 'fa-coffee text-amber-700 bg-amber-50' : 'fa-utensils text-emerald-600 bg-emerald-50';
+                card.innerHTML = `<div class="flex items-center space-x-2.5 pb-2 border-b"><div class="${icon} w-9 h-9 rounded-2xl flex items-center justify-center text-sm"></div><h3 class="text-sm font-bold text-slate-800">${v}</h3></div><div class="space-y-2" id="items-${v.replace(/\s+/g, '')}"></div>`;
+                container.appendChild(card);
+                const itemsDiv = document.getElementById(`items-${v.replace(/\s+/g, '')}`);
+                grouped[v].forEach(p => {
+                    const row = document.createElement('label');
+                    row.className = "flex items-center justify-between bg-slate-50/50 px-3.5 py-3 rounded-2xl cursor-pointer border border-slate-100 transition-all text-xs font-bold text-slate-700";
+                    row.innerHTML = `<div class="flex items-center space-x-3"><input type="checkbox" value="${p.item}" data-price="${p.price}" onchange="handleItemSelect(this)" class="w-5 h-5 rounded-lg text-emerald-600 border-slate-200 focus:ring-0"><span>${p.item}</span></div><span class="font-black text-slate-900">NT$ ${p.price}</span>`;
+                    itemsDiv.appendChild(row);
                 });
             });
         }
 
+        // 自訂餐點折疊展開控制
         function toggleCustomItem() {
             isCustomOpen = !isCustomOpen;
-            const fields = document.getElementById('customFields');
-            const arrow = document.getElementById('customArrow');
-            if (isCustomOpen) {
-                fields.classList.remove('hidden');
-                arrow.style.transform = 'rotate(180deg)';
-                document.getElementById('customName').addEventListener('input', calculateTotal);
-                document.getElementById('customPrice').addEventListener('input', calculateTotal);
-            } else {
-                fields.classList.add('hidden');
-                arrow.style.transform = 'rotate(0deg)';
-                calculateTotal();
-            }
+            const fields = document.getElementById('customFields'); const arrow = document.getElementById('customArrow');
+            if (isCustomOpen) { fields.classList.remove('hidden'); arrow.style.transform = 'rotate(180deg)'; document.getElementById('customName').addEventListener('input', calculateTotal); document.getElementById('customPrice').addEventListener('input', calculateTotal); } 
+            else { fields.classList.add('hidden'); arrow.style.transform = 'rotate(0deg)'; calculateTotal(); }
         }
 
-        function handleItemSelect(checkbox) {
-            const itemName = checkbox.value;
-            const itemPrice = parseInt(checkbox.getAttribute('data-price'), 10);
-            if (checkbox.checked) {
-                selectedItems[itemName] = itemPrice;
-                checkbox.closest('label').classList.add('border-emerald-500', 'bg-emerald-50/20');
-            } else {
-                delete selectedItems[itemName];
-                checkbox.closest('label').classList.remove('border-emerald-500', 'bg-emerald-50/20');
-            }
+        // 餐點勾選行為處理
+        function handleItemSelect(cb) {
+            if (cb.checked) { selectedItems[cb.value] = parseInt(cb.getAttribute('data-price'), 10); cb.closest('label').classList.add('border-emerald-500', 'bg-emerald-50/20'); } 
+            else { delete selectedItems[cb.value]; cb.closest('label').classList.remove('border-emerald-500', 'bg-emerald-50/20'); }
             calculateTotal();
         }
 
+        // 計算目前選擇的累積總價
         function calculateTotal() {
-            let total = 0;
-            Object.keys(selectedItems).forEach(key => { total += selectedItems[key]; });
-            if (isCustomOpen) {
-                const cName = document.getElementById('customName').value.trim();
-                const cPrice = parseInt(document.getElementById('customPrice').value, 10);
-                if (cName && cPrice > 0) total += cPrice;
-            }
+            let total = 0; Object.keys(selectedItems).forEach(k => total += selectedItems[k]);
+            if (isCustomOpen) { const p = parseInt(document.getElementById('customPrice').value, 10); if (p > 0 && document.getElementById('customName').value.trim()) total += p; }
             document.getElementById('totalPriceDisplay').innerText = `NT$ ${total}`;
             const btn = document.getElementById('btnSubmit');
-            if (total > 0) {
-                btn.disabled = false;
-                btn.className = "bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-3.5 rounded-2xl text-xs transition-all shadow-md active:scale-95 flex items-center space-x-1.5 cursor-pointer";
-            } else {
-                btn.disabled = true;
-                btn.className = "bg-slate-300 text-slate-500 font-bold px-6 py-3.5 rounded-2xl text-xs transition-all shadow-md flex items-center space-x-1.5 cursor-not-allowed";
-            }
+            if (total > 0) { btn.disabled = false; btn.className = "bg-emerald-600 text-white font-bold px-6 py-3.5 rounded-2xl text-xs shadow-md active:scale-95"; } 
+            else { btn.disabled = true; btn.className = "bg-slate-300 text-slate-500 font-bold px-6 py-3.5 rounded-2xl text-xs cursor-not-allowed"; }
         }
 
+        // 送出點餐明細至 GAS
         function submitOrder() {
-            const btn = document.getElementById('btnSubmit');
-            btn.disabled = true;
-            btn.innerHTML = `<i class="fas fa-circle-notch animate-spin"></i> <span>正在傳送資料...</span>`;
-
-            let itemsList = [];
-            let totalAmount = 0;
-            Object.keys(selectedItems).forEach(key => {
-                itemsList.push(key);
-                totalAmount += selectedItems[key];
-            });
-            if (isCustomOpen) {
-                const cName = document.getElementById('customName').value.trim();
-                const cPrice = parseInt(document.getElementById('customPrice').value, 10);
-                if (cName && cPrice > 0) {
-                    itemsList.push(`${cName}(自訂)`);
-                    totalAmount += cPrice;
-                }
-            }
-
-            const finalItemString = itemsList.join(' + ');
-            const submitUrl = `${GAS_WEB_APP_URL}?method=submitOrder&name=${encodeURIComponent(currentUserName)}&item=${encodeURIComponent(finalItemString)}&amount=${totalAmount}`;
-
-            fetch(submitUrl)
-                .then(response => response.json())
-                .then(json => {
-                    if (json && json.status === "success") {
-                        showToast("🎉 點餐已成功登錄！", "success");
-                        setTimeout(() => { liff.closeWindow(); }, 1500);
-                    } else {
-                        throw new Error(json.message);
-                    }
-                })
-                .catch(err => {
-                    showToast("😢 傳送失敗，請重試", "error");
-                    btn.disabled = false;
-                    btn.innerHTML = `<i class="fas fa-paper-plane"></i> <span>確認送出訂單</span>`;
-                });
+            const btn = document.getElementById('btnSubmit'); btn.disabled = true;
+            let list = []; let total = 0;
+            Object.keys(selectedItems).forEach(k => { list.push(k); total += selectedItems[k]; });
+            if (isCustomOpen) { const n = document.getElementById('customName').value.trim(); const p = parseInt(document.getElementById('customPrice').value, 10); if (n && p > 0) { list.push(`${n}(自訂)`); total += p; } }
+            fetch(`${GAS_WEB_APP_URL}?method=submitOrder&name=${encodeURIComponent(currentUserName)}&item=${encodeURIComponent(list.join(' + '))}&amount=${total}`)
+                .then(res => res.json()).then(json => { if (json.status === "success") { showToast("🎉 點餐已成功登錄！", "success"); setTimeout(() => liff.closeWindow(), 1200); } });
         }
 
-
-        // ==================== 【分流視角 2: 團員個人專屬帳單對帳】 ====================
-
-        function renderPersonalBill(order) {
-            const userBillCard = document.getElementById('userBillCard');
-            const userNoBillNotice = document.getElementById('userNoBillNotice');
-
-            if (!order || order.amount === 0) {
-                // 如果當天沒有點餐
-                userBillCard.classList.add('hidden');
-                userNoBillNotice.classList.remove('hidden');
-                return;
-            }
-
-            userBillCard.classList.remove('hidden');
-            userNoBillNotice.classList.add('hidden');
-
-            // 1. 渲染基本金額與明細
+        // 渲染個人繳款對帳資訊 (狀態 2：對帳階段)
+        function renderPersonalBill(order, bank, account) {
+            const billCard = document.getElementById('userBillCard'); const noBill = document.getElementById('userNoBillNotice');
+            if (!order || order.amount === 0) { billCard.classList.add('hidden'); noBill.classList.remove('hidden'); return; }
+            billCard.classList.remove('hidden'); noBill.classList.add('hidden');
+            
             document.getElementById('billAmount').innerText = `NT$ ${order.amount}`;
             document.getElementById('billItems').innerText = order.item;
-            
-            // 讀取預設代墊人收款設定
-            const bCode = typeof CONFIG !== 'undefined' ? CONFIG.LEADER_BANK_CODE : "012";
-            const bAcc = typeof CONFIG !== 'undefined' ? CONFIG.LEADER_ACCOUNT : "68812345678901";
-            document.getElementById('billAccText').innerText = bAcc;
+            document.getElementById('billLeaderName').innerText = dynamicLeaderName;
+            document.getElementById('billAccText').innerText = account;
 
-            // 2. 產生付款狀態指示燈
-            const statusBox = document.getElementById('paymentStatusBox');
-            const btnReportPay = document.getElementById('btnReportPay');
-
+            const box = document.getElementById('paymentStatusBox'); const btn = document.getElementById('btnReportPay');
             if (order.status === "未付") {
-                statusBox.className = "p-3.5 rounded-2xl text-xs font-bold bg-amber-50 text-amber-800 border border-amber-100";
-                statusBox.innerHTML = `⚠️ 付款狀態：尚未對帳。請選用下方富邦 App 喚醒或直接掃碼轉帳！`;
-                btnReportPay.disabled = false;
-                btnReportPay.className = "w-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-3.5 rounded-2xl transition-all flex items-center justify-center space-x-1.5 shadow-md active:scale-95 cursor-pointer";
-                document.getElementById('qrArea').style.opacity = "1";
-                
-                // 動態產生王大明自己專屬的 TWQRP 碼
-                generateUserTWQRP(bCode, bAcc, order.amount);
+                box.className = "p-3 rounded-2xl text-xs font-bold bg-amber-50 text-amber-800 border border-amber-100"; box.innerHTML = `⚠️ 付款狀態：尚未付款。請點擊或掃描下方轉帳！`;
+                btn.disabled = false; btn.className = "w-full bg-indigo-600 text-white text-xs font-bold py-3 rounded-2xl shadow-md active:scale-95";
+                document.getElementById('userQrcode').innerHTML = '';
+                // 產生高精度 TWQRP 行動條碼規格
+                new QRCode(document.getElementById('userQrcode'), { text: `TWQRP://${bank}NTTransfer/158/02/V1?D6=${account.replace(/\s/g, '').padStart(16, '0')}&D5=${bank}&D1=${order.amount * 100}&D10=901`, width: 160, height: 160, colorDark: "#0f172a", correctLevel: QRCode.CorrectLevel.M });
             } else if (order.status === "待確認") {
-                statusBox.className = "p-3.5 rounded-2xl text-xs font-bold bg-indigo-50 text-indigo-800 border border-indigo-100";
-                statusBox.innerHTML = `⏳ 付款狀態：已通知團長對帳中，請等候。`;
-                btnReportPay.disabled = true;
-                btnReportPay.className = "w-full bg-slate-200 text-slate-400 text-xs font-bold py-3.5 rounded-2xl cursor-not-allowed flex items-center justify-center space-x-1";
-                document.getElementById('qrArea').style.opacity = "0.3";
-                generateUserTWQRP(bCode, bAcc, order.amount);
-            } else if (order.status === "已付") {
-                statusBox.className = "p-3.5 rounded-2xl text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-100";
-                statusBox.innerHTML = `🎉 付款狀態：已完成付款核對！感謝代墊！`;
-                btnReportPay.disabled = true;
-                btnReportPay.className = "w-full bg-slate-200 text-slate-400 text-xs font-bold py-3.5 rounded-2xl cursor-not-allowed flex items-center justify-center space-x-1";
-                document.getElementById('qrArea').style.opacity = "0.1";
-                generateUserTWQRP(bCode, bAcc, order.amount);
+                box.className = "p-3 rounded-2xl text-xs font-bold bg-indigo-50 text-indigo-800 border border-indigo-100"; box.innerHTML = `⏳ 付款狀態：已通知團長對帳中，請稍候。`;
+                btn.disabled = true; btn.className = "w-full bg-slate-200 text-slate-400 text-xs font-bold py-3 rounded-2xl cursor-not-allowed";
+                document.getElementById('userQrcode').innerHTML = '<p class="text-xs text-indigo-400 font-bold p-12">等待查帳核對中</p>';
+            } else {
+                box.className = "p-3 rounded-2xl text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-100"; box.innerHTML = `🎉 付款狀態：已完成對帳！謝謝代墊！`;
+                btn.disabled = true; btn.className = "w-full bg-slate-200 text-slate-400 text-xs font-bold py-3 rounded-2xl cursor-not-allowed";
+                document.getElementById('userQrcode').innerHTML = '<p class="text-xs text-emerald-500 font-bold p-12">對帳繳款完成</p>';
             }
-
-            // 付款參數載入
-            activeModalPayload = { name: currentUserName, amount: order.amount, acc: bAcc };
+            activeModalPayload = { name: currentUserName, amount: order.amount, acc: account };
         }
 
-        // 產生專屬 TWQRP
-        function generateUserTWQRP(bank, account, amount) {
-            const qrContainer = document.getElementById('userQrcode');
-            qrContainer.innerHTML = '';
-            
-            const paddedAcc = account.replace(/\s/g, '').padStart(16, '0');
-            const cents = amount * 100;
-            const twqrpString = `TWQRP://${bank}NTTransfer/158/02/V1?D6=${paddedAcc}&D5=${bank}&D1=${cents}&D10=901`;
-
-            // 動態渲染條碼
-            new QRCode(qrContainer, {
-                text: twqrpString,
-                width: 170,
-                height: 170,
-                colorDark : "#0f172a",
-                colorLight : "#ffffff",
-                correctLevel : QRCode.CorrectLevel.M
-            });
-        }
-
-        // 團員：點擊回報付款
+        // 團員異地回報付款至雲端
         function reportPayment() {
-            const btn = document.getElementById('btnReportPay');
-            btn.disabled = true;
-            btn.innerHTML = `<i class="fas fa-circle-notch animate-spin"></i> <span>正在送出付款通知...</span>`;
-
-            const payUrl = `${GAS_WEB_APP_URL}?method=reportPayment&name=${encodeURIComponent(currentUserName)}&userId=${liff.getContext() ? liff.getContext().userId : 'test-user'}`;
-
-            fetch(payUrl)
-                .then(response => response.json())
-                .then(json => {
-                    if (json && json.status === "success") {
-                        showToast("🙋 付款回報成功！已在群組發送對帳通知", "success");
-                        setTimeout(() => { liff.closeWindow(); }, 1500);
-                    } else {
-                        throw new Error(json.message);
-                    }
-                })
-                .catch(err => {
-                    showToast("😢 回報失敗，請直接通知團長", "error");
-                    btn.disabled = false;
-                    btn.innerHTML = `<i class="fas fa-check-circle"></i> <span>🙋 我已完成轉帳，通知團長對帳</span>`;
-                });
+            const btn = document.getElementById('btnReportPay'); btn.disabled = true;
+            btn.innerHTML = `<i class="fas fa-circle-notch animate-spin"></i> <span>處理中...</span>`;
+            fetch(`${GAS_WEB_APP_URL}?method=reportPayment&name=${encodeURIComponent(currentUserName)}`)
+                .then(res => res.json()).then(json => { if (json.status === "success") { showToast("🙋 付款回報成功！", "success"); setTimeout(() => liff.closeWindow(), 1200); } });
         }
 
+        // 👑 團長：發起階段變更並將個人收款設定綁定至試算表
+        function changeSystemStage(tStage) {
+            const bCode = document.getElementById('leaderBank').value; const bAcc = document.getElementById('leaderAcc').value.trim();
+            if (tStage === "SETTLING" && !bAcc) { showToast("⚠️ 請先輸入您的收款帳號！", "error"); return; }
+            fetch(`${GAS_WEB_APP_URL}?method=toggleStage&stage=${tStage}&bankCode=${bCode}&account=${bAcc}&leaderName=${encodeURIComponent(currentUserName)}`)
+                .then(res => res.json()).then(json => { if (json.status === "success") { currentSystemStage = json.stage; updateLeaderStageButtons(); showToast("階段變更成功！", "success"); } });
+        }
 
-        // ==================== 【👑 團長專屬主控功能群】 ====================
-
-        // 👑 更新開團階段管理按鈕視覺樣式
+        // 👑 團長：主控台兩階段管理按鈕樣式同步
         function updateLeaderStageButtons() {
-            const btnOrd = document.getElementById('btnStageOrdering');
-            const btnSet = document.getElementById('btnStageSettling');
-
-            if (currentSystemStage === "ORDERING") {
-                btnOrd.className = "py-2.5 rounded-xl font-bold border-2 border-emerald-500 bg-emerald-50 text-emerald-800 transition-all";
-                btnSet.className = "py-2.5 rounded-xl font-bold border border-slate-200 text-slate-500 hover:bg-slate-50 transition-all";
-            } else {
-                btnSet.className = "py-2.5 rounded-xl font-bold border-2 border-indigo-500 bg-indigo-50 text-indigo-800 transition-all";
-                btnOrd.className = "py-2.5 rounded-xl font-bold border border-slate-200 text-slate-500 hover:bg-slate-50 transition-all";
-            }
+            const o = document.getElementById('btnStageOrdering'); const s = document.getElementById('btnStageSettling');
+            if (currentSystemStage === "ORDERING") { o.className = "py-2.5 rounded-xl font-bold border-2 border-emerald-500 bg-emerald-50 text-emerald-800 w-full"; s.className = "py-2.5 rounded-xl font-bold border text-slate-400 w-full"; } 
+            else { s.className = "py-2.5 rounded-xl font-bold border-2 border-indigo-500 bg-indigo-50 text-indigo-800 w-full"; o.className = "py-2.5 rounded-xl font-bold border text-slate-400 w-full"; }
         }
 
-        // 👑 改變系統狀態階段 (發起結帳與群組廣播)
-        function changeSystemStage(targetStage) {
-            const btnOrd = document.getElementById('btnStageOrdering');
-            const btnSet = document.getElementById('btnStageSettling');
-            
-            btnOrd.disabled = true;
-            btnSet.disabled = true;
-
-            const changeUrl = `${GAS_WEB_APP_URL}?method=toggleStage&stage=${targetStage}&leaderName=${encodeURIComponent(currentUserName)}`;
-
-            fetch(changeUrl)
-                .then(response => response.json())
-                .then(json => {
-                    if (json && json.status === "success") {
-                        currentSystemStage = json.stage;
-                        updateLeaderStageButtons();
-                        showToast(targetStage === "SETTLING" ? "📢 已向 LINE 群組發送「結帳付款卡片」！" : "🍔 系統已重設回「開放點餐及追加狀態」", "success");
-                    }
-                })
-                .catch(err => showToast("😢 變更階段失敗", "error"))
-                .finally(() => {
-                    btnOrd.disabled = false;
-                    btnSet.disabled = false;
-                });
-        }
-
-        // 👑 讀取並渲染所有人點餐明細
+        // 👑 團長：同步當天全體點單狀態與繳費金額
         function syncActiveOrders() {
-            const container = document.getElementById('activeOrdersContainer');
-            container.innerHTML = `
-                <div class="text-center py-6">
-                    <div class="inline-block animate-spin rounded-full h-5 w-5 text-indigo-600 border-2 border-solid border-current border-r-transparent align-[-0.125em]"></div>
-                    <p class="text-[10px] text-slate-400 mt-2 font-bold">正在讀取最新訂單資料...</p>
-                </div>
-            `;
-
-            const syncUrl = `${GAS_WEB_APP_URL}?method=getActiveOrders`;
-
-            fetch(syncUrl)
-                .then(response => response.json())
-                .then(json => {
-                    if (json && json.status === "success") {
-                        renderActiveOrders(json.data);
-                    }
-                })
-                .catch(err => {
-                    container.innerHTML = `<p class="text-center py-4 text-xs text-rose-500 font-bold">同步失敗</p>`;
-                });
+            fetch(`${GAS_WEB_APP_URL}?method=getActiveOrders`).then(res => res.json()).then(json => { if (json.status === "success") renderActiveOrders(json.data); });
         }
 
-        // 👑 渲染所有人點單明細列表與對帳狀態
+        // 👑 團長：動態渲染對帳列表明細
         function renderActiveOrders(orders) {
-            const container = document.getElementById('activeOrdersContainer');
-            container.innerHTML = '';
-
-            if (!orders || orders.length === 0) {
-                container.innerHTML = `<p class="text-center py-6 text-xs text-slate-400">目前今日還沒有人下單喔！</p>`;
-                document.getElementById('activeTotalSum').innerText = 'NT$ 0';
-                return;
-            }
-
-            let totalSum = 0;
-
+            const div = document.getElementById('activeOrdersContainer'); div.innerHTML = ''; let sum = 0;
             orders.forEach(o => {
-                totalSum += o.amount;
-
-                // 根據付款狀態設定按鈕樣式與文字
-                let statusBadge = '';
-                let actionBtn = '';
-
-                if (o.status === "已付") {
-                    statusBadge = `<span class="bg-emerald-50 text-emerald-600 text-[8px] font-bold px-1.5 py-0.5 rounded-full">已對帳</span>`;
-                    actionBtn = `
-                        <button disabled class="bg-slate-100 text-slate-400 text-[10px] font-bold px-3 py-1.5 rounded-xl cursor-not-allowed">
-                            對帳完畢
-                        </button>
-                    `;
-                } else if (o.status === "待確認") {
-                    statusBadge = `<span class="bg-amber-500 text-white text-[8px] font-bold px-1.5 py-0.5 rounded-full animate-pulse">待確認</span>`;
-                    actionBtn = `
-                        <button onclick="openConfirmSettleModal('${o.name}', ${o.amount})" class="bg-amber-500 text-white text-[10px] font-bold px-3 py-1.5 rounded-xl flex items-center space-x-1 hover:bg-amber-600 active:scale-95 transition-all">
-                            <i class="fas fa-coins"></i>
-                            <span>核對查帳</span>
-                        </button>
-                    `;
-                } else {
-                    statusBadge = `<span class="bg-slate-100 text-slate-500 text-[8px] font-bold px-1.5 py-0.5 rounded-full">未付</span>`;
-                    actionBtn = `
-                        <button onclick="openConfirmSettleModal('${o.name}', ${o.amount})" class="bg-indigo-600 text-white text-[10px] font-bold px-3 py-1.5 rounded-xl flex items-center space-x-1 hover:bg-indigo-700 active:scale-95 transition-all">
-                            <i class="fas fa-qrcode"></i>
-                            <span>手動對帳</span>
-                        </button>
-                    `;
-                }
-
-                const card = document.createElement('div');
-                card.className = "flex justify-between items-center bg-slate-50 hover:bg-slate-100 p-3 rounded-2xl border border-slate-100 transition-all";
-                card.innerHTML = `
-                    <div class="flex-1 min-w-0 pr-2">
-                        <div class="flex items-center space-x-1.5">
-                            <span class="font-bold text-xs text-slate-700">${o.name}</span>
-                            ${statusBadge}
-                        </div>
-                        <p class="text-[9px] text-slate-400 truncate mt-0.5">${o.item}</p>
-                    </div>
-                    <div class="flex items-center space-x-2 shrink-0">
-                        <span class="font-black text-indigo-600 text-xs">NT$ ${o.amount}</span>
-                        ${actionBtn}
-                    </div>
-                `;
-                container.appendChild(card);
+                sum += o.amount; let badge = '', btn = '';
+                if (o.status === "已付") { badge = `<span class="bg-emerald-50 text-emerald-600 text-[8px] font-bold px-1.5 py-0.5 rounded-full">已對帳</span>`; btn = `<button disabled class="bg-slate-100 text-slate-400 text-[10px] font-bold px-3 py-1.5 rounded-xl">對帳完畢</button>`; } 
+                else if (o.status === "待確認") { badge = `<span class="bg-amber-500 text-white text-[8px] font-bold px-1.5 py-0.5 rounded-full animate-pulse">待確認</span>`; btn = `<button onclick="openConfirmSettleModal('${o.name}', ${o.amount})" class="bg-amber-500 text-white text-[10px] font-bold px-3 py-1.5 rounded-xl">核對查帳</button>`; } 
+                else { badge = `<span class="bg-slate-100 text-slate-500 text-[8px] font-bold px-1.5 py-0.5 rounded-full">未付</span>`; btn = `<button onclick="openConfirmSettleModal('${o.name}', ${o.amount})" class="bg-indigo-600 text-white text-[10px] font-bold px-3 py-1.5 rounded-xl">手動對帳</button>`; }
+                const card = document.createElement('div'); card.className = "flex justify-between items-center bg-slate-50 p-3 rounded-2xl border text-xs";
+                card.innerHTML = `<div class="flex-1 min-w-0 pr-2"><div class="flex items-center space-x-1.5"><span class="font-bold text-slate-700">${o.name}</span>${badge}</div><p class="text-[9px] text-slate-400 truncate mt-0.5">${o.item}</p></div><div class="flex items-center space-x-2 shrink-0"><span class="font-black text-indigo-600">NT$ ${o.amount}</span>${btn}</div>`;
+                div.appendChild(card);
             });
-
-            document.getElementById('activeTotalSum').innerText = `NT$ ${totalSum}`;
+            document.getElementById('activeTotalSum').innerText = `NT$ ${sum}`;
         }
 
-        // 👑 打開查帳與確認收款彈窗
-        function openConfirmSettleModal(name, amount) {
-            activeModalPayload = { name: name, amount: amount };
-            document.getElementById('modalName').innerText = `確認 [ ${name} ] 的款項`;
-            document.getElementById('modalPrice').innerText = `NT$ ${amount}`;
-            document.getElementById('qrModal').classList.remove('hidden');
-        }
-
-        // 👑 團長現場確認收款 (點擊彈窗按鈕)
-        function confirmReceivedCash() {
-            if (!activeModalPayload) return;
-            
-            const name = activeModalPayload.name;
-            closeModal();
-            showToast(`正在核對 [ ${name} ] 的款項...`, "success");
-
-            const confirmUrl = `${GAS_WEB_APP_URL}?method=confirmPayment&name=${encodeURIComponent(name)}`;
-
-            fetch(confirmUrl)
-                .then(response => response.json())
-                .then(json => {
-                    if (json && json.status === "success") {
-                        showToast(`🎉 已成功標記 [ ${name} ] 為已付款！`, "success");
-                        syncActiveOrders(); // 重新整理所有人明細
-                    }
-                })
-                .catch(err => showToast("😢 標記失敗，請手動至 Excel 變更狀態", "error"));
-        }
-
-        // 👑 全數收訖關閉本團並歸檔
-        function archiveTodayOrders() {
-            if (!confirm("⚠️ 確定要關閉本日點餐嗎？這將會把「今日點單明細」全部歸檔至「History」歷史工作表，並將點餐區清空！")) {
-                return;
-            }
-
-            const btn = document.getElementById('btnArchive');
-            btn.disabled = true;
-            btn.innerHTML = `<i class="fas fa-circle-notch animate-spin"></i> <span>正在對帳歸檔中...</span>`;
-
-            const archiveUrl = `${GAS_WEB_APP_URL}?method=archiveOrders`;
-
-            fetch(archiveUrl)
-                .then(response => response.json())
-                .then(json => {
-                    if (json && json.status === "success") {
-                        showToast("🎉 已成功將今日明細歸檔，並重置開團狀態！", "success");
-                        switchTab('member');
-                        syncSystemState("leader", currentUserName);
-                    }
-                })
-                .catch(err => showToast("😢 歸檔失敗", "error"))
-                .finally(() => {
-                    btn.disabled = false;
-                    btn.innerHTML = `<i class="fas fa-check-double"></i> <span>全數收訖，關閉本團並歸檔</span>`;
-                });
-        }
-
-        // 👑 呼叫富邦原生 Deep Link一鍵喚醒
-        function triggerFubonDeepLink() {
-            if (!activeModalPayload) return;
-            const fubonScheme = `aibank.fubon://?taskId=NDSTX001`;
-            window.location.href = fubonScheme;
-            showToast("正在自動喚醒富邦 App ➡️ 轉帳頁面", "success");
-        }
-
-        // 👑 複製完整轉帳資訊 (Plan B)
-        function copyPaymentText() {
-            if (!activeModalPayload) return;
-            const textToCopy = `【SentryPay 辦公室點餐】\n代墊人：${(typeof CONFIG !== 'undefined' && CONFIG.LEADER_NAME) || '團長'}\n付款金額：NT$ ${activeModalPayload.amount} 元\n收款帳戶：台北富邦銀行 (012)\n帳號：${activeModalPayload.acc || (typeof CONFIG !== 'undefined' ? CONFIG.LEADER_ACCOUNT : '68812345678901')}\n\n感謝代墊！`;
-            
-            const el = document.createElement('textarea');
-            el.value = textToCopy;
-            document.body.appendChild(el);
-            el.select();
-            document.execCommand('copy');
-            document.body.removeChild(el);
-
-            showToast("📋 轉帳文字資訊已複製！", "success");
-        }
-
-        // 👑 新增常用店家與品項範本
-        function submitNewVendorItem() {
-            const vName = document.getElementById('newVendorName').value.trim();
-            const iName = document.getElementById('newItemName').value.trim();
-            const iPrice = document.getElementById('newItemPrice').value.trim();
-
-            if (!vName || !iName || !iPrice) {
-                showToast("⚠️ 請完整填寫店家、品項與價格！", "error");
-                return;
-            }
-
-            const btn = document.getElementById('btnAddNewVendor');
-            btn.disabled = true;
-            btn.innerHTML = `<i class="fas fa-circle-notch animate-spin"></i> <span>正在上傳至 Google 試算表...</span>`;
-
-            // 利用 submitOrderToSheet 中轉紀錄至 Vendors 工作表
-            const addUrl = `${GAS_WEB_APP_URL}?method=submitOrder&name=${encodeURIComponent('👑系統範本')}&item=${encodeURIComponent('店家:'+vName+' | 品項:'+iName)}&amount=${iPrice}`;
-
-            fetch(addUrl)
-                .then(response => response.json())
-                .then(json => {
-                    if (json && json.status === "success") {
-                        showToast("✨ 新增紀錄成功！請至 Google Sheets Vendors 分頁補齊或直接查看！", "success");
-                        document.getElementById('newVendorName').value = '';
-                        document.getElementById('newItemName').value = '';
-                        document.getElementById('newItemPrice').value = '';
-                    } else {
-                        throw new Error(json.message);
-                    }
-                })
-                .catch(err => {
-                    showToast("😢 連線失敗，請稍後再試", "error");
-                })
-                .finally(() => {
-                    btn.disabled = false;
-                    btn.innerHTML = `<i class="fas fa-cloud-upload-alt"></i> <span>新增品項至 Google 試算表範本</span>`;
-                });
-        }
-
-        function closeModal() {
-            document.getElementById('qrModal').classList.add('hidden');
-        }
-
-
-        // ==================== 【輔助功能群】 ====================
-
-        function showDiagnostic(url, errorMsg) {
-            document.getElementById('diagUrl').innerText = url;
-            document.getElementById('diagError').innerText = errorMsg;
-            document.getElementById('diagnosticPanel').classList.remove('hidden');
-        }
-
-        function showToast(message, type = "success") {
-            const toast = document.getElementById('toast');
-            const icon = document.getElementById('toastIcon');
-            const text = document.getElementById('toastText');
-
-            text.innerText = message;
-            if (type === "success") {
-                toast.className = "fixed top-6 left-1/2 -translate-x-1/2 px-4 py-3 rounded-2xl text-xs font-bold text-white shadow-xl bg-emerald-600 flex items-center space-x-2 transition-all duration-300 z-50 opacity-100 translate-y-0";
-                icon.className = "fas fa-check-circle";
-            } else {
-                toast.className = "fixed top-6 left-1/2 -translate-x-1/2 px-4 py-3 rounded-2xl text-xs font-bold text-white shadow-xl bg-rose-600 flex items-center space-x-2 transition-all duration-300 z-50 opacity-100 translate-y-0";
-                icon.className = "fas fa-times-circle";
-            }
-
-            setTimeout(() => {
-                toast.className = "fixed top-6 left-1/2 -translate-x-1/2 px-4 py-3 rounded-2xl text-xs font-bold text-white shadow-xl transition-all duration-300 transform translate-y-[-100px] opacity-0 z-50 flex items-center space-x-2";
-            }, 3000);
+        // 👑 團長：彈出確認查帳與入帳審查視窗
+        function openConfirmSettleModal(n, a) { activeModalPayload = { name: n, amount: a }; document.getElementById('modalName').innerText = `核對 [ ${n} ] 的款項`; document.getElementById('modalPrice').innerText = `NT$ ${a}`; document.getElementById('qrModal').classList.remove('hidden'); }
+        function closeModal() { document.getElementById('qrModal').classList.add('hidden'); }
+        
+        // 👑 團長：點擊確認入帳（消帳更新為「已付」）
+        function confirmReceivedCash() { closeModal(); fetch(`${GAS_WEB_APP_URL}?method=confirmPayment&name=${encodeURIComponent(activeModalPayload.name)}`).then(res => res.json()).then(json => { if (json.status === "success") { showToast("核對成功！", "success"); syncActiveOrders(); } }); }
+        
+        // 👑 團長：全體對帳完畢一鍵關閉本團歸檔
+        function archiveTodayOrders() { if(confirm("確定全數收訖並結案歸檔嗎？這將清空今日餐點欄位並移至 History 存檔！")) { fetch(`${GAS_WEB_APP_URL}?method=archiveOrders`).then(res => res.json()).then(json => { if (json.status === "success") { showToast("結案歸檔成功！", "success"); setTimeout(() => liff.closeWindow(), 1200); } }); } }
+        
+        // 一鍵喚醒富邦網銀 App Deep Link 機制
+        function triggerFubonDeepLink() { window.location.href = `aibank.fubon://?taskId=NDSTX001`; }
+        
+        // 複製完整轉帳文字資訊
+        function copyPaymentText() { const el = document.createElement('textarea'); el.value = `【SentryPay 點餐】\n代墊人：${dynamicLeaderName}\n付款金額：NT$ ${activeModalPayload.amount} 元\n收款帳戶：台北富邦 (012)\n帳號：${activeModalPayload.acc}`; document.body.appendChild(el); el.select(); document.execCommand('copy'); document.body.removeChild(el); showToast("複製轉帳資訊成功！", "success"); }
+        
+        // 輔助函式：出錯時顯示開發者偵錯報告
+        function showDiagnostic(u, e) { document.getElementById('diagUrl').innerText = u; document.getElementById('diagError').innerText = e; document.getElementById('diagnosticPanel').classList.remove('hidden'); }
+        
+        // 輔助函式：自製非阻塞快顯 Toast 提示
+        function showToast(m, t) { 
+            const toast = document.getElementById('toast'); 
+            toast.className = `fixed top-6 left-1/2 -translate-x-1/2 px-4 py-3 rounded-2xl text-xs font-bold text-white shadow-xl flex items-center space-x-2 bg-${t === 'success'?'emerald-600':'rose-600'} opacity-100 translate-y-0 z-50 transition-all duration-300`; 
+            document.getElementById('toastText').innerText = m; 
+            setTimeout(() => toast.className = "fixed top-6 left-1/2 -translate-x-1/2 px-4 py-3 rounded-2xl text-xs font-bold text-white shadow-xl transform translate-y-[-100px] opacity-0 transition-all duration-300", 2500); 
         }
     </script>
 </body>
